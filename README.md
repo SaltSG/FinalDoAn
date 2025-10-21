@@ -48,6 +48,12 @@ npm run dev
 └─ README.md
 ```
 
+### Màu thương hiệu
+- Primary (cam): `#f59e0b`
+- Secondary (xanh navy): `#1f3b5b`
+- Accent: `#5ec6df`
+- Đã khai báo trong `frontend/src/styles.css` dưới dạng CSS variables (`--color-primary`, `--color-secondary`, `--color-accent`).
+
 ### Quy ước commit (khuyến nghị)
 - feat: tính năng mới
 - fix: sửa lỗi

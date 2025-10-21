@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react';
+import Navbar from '../../components/Navbar';
+import DashboardPage from '../../pages/DashboardPage';
+import Sidebar from '../../components/Sidebar';
+import { Layout } from 'antd';
 
 export default function App() {
   const [health, setHealth] = useState<string>('Đang kiểm tra...');
@@ -10,10 +14,19 @@ export default function App() {
       .catch(() => setHealth('error'));
   }, []);
 
+  const isHealthy = health === 'ok';
+
+  const [collapsed, setCollapsed] = useState<boolean>(false);
+
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', padding: 24 }}>
-      <h1>Study Tracker</h1>
-      <p>API health: {health}</p>
+    <div className="app">
+      <Layout className="layout">
+        <Sidebar collapsed={collapsed} onCollapse={setCollapsed} logoSrc="/Multimedia.png" />
+        <Layout>
+          <Navbar rightContent={null} />
+          <DashboardPage logoSrc="/Multimedia.png" />
+        </Layout>
+      </Layout>
     </div>
   );
 }
