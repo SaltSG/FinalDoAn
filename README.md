@@ -3,8 +3,8 @@
 Monorepo cho đồ án tốt nghiệp: Xây dựng hệ thống quản lý tiến độ học tập cá nhân cho sinh viên ngành Công nghệ đa phương tiện.
 
 ### Kiến trúc
-- client: React + Vite + TypeScript
-- server: Node.js + Express + TypeScript
+- frontend: React + Vite + TypeScript
+- backend: Node.js + Express + TypeScript
 - Quản lý bằng npm workspaces, lint/format đồng bộ, CI GitHub Actions
 
 ### Yêu cầu hệ thống
@@ -16,8 +16,8 @@ Monorepo cho đồ án tốt nghiệp: Xây dựng hệ thống quản lý tiế
 npm install
 npm run dev
 ```
-- Client: http://localhost:5173
-- Server: http://localhost:5000
+- Frontend: http://localhost:5173
+- Backend: http://localhost:5000
 
 ### Scripts chính
 - `npm run dev`: chạy đồng thời client và server
@@ -29,8 +29,17 @@ npm run dev
 ### Cấu trúc thư mục
 ```
 .
-├─ client/        # Ứng dụng React
-├─ server/        # API Express
+├─ frontend/      # Ứng dụng React
+│  └─ src/
+│     ├─ pages/
+│     ├─ components/
+│     ├─ hooks/
+│     └─ services/
+├─ backend/       # API Express
+│  └─ src/
+│     ├─ routes/
+│     ├─ models/
+│     └─ controllers/
 ├─ .github/       # CI workflow
 ├─ .editorconfig
 ├─ .gitignore
@@ -49,8 +58,8 @@ npm run dev
 - chore: việc vặt (build, deps, CI)
 
 ### Biến môi trường
-- `server/.env` (tham khảo `server/.env.example`)
-- `client/.env` (không bắt buộc do đã cấu hình proxy)
+- `backend/.env` (tham khảo `backend/.env.example`)
+- `frontend/.env` (không bắt buộc do đã cấu hình proxy)
 
 ### Cộng tác qua Git
 1. Khởi tạo repo, đẩy lên GitHub, mời collaborator
