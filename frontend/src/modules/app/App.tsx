@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import Navbar from '../../components/Navbar';
 import DashboardPage from '../../pages/DashboardPage';
+import DeadlinePage from '../../pages/DeadlinePage';
+import ProgressPage from '../../pages/ProgressPage';
+import ResultsPage from '../../pages/ResultsPage';
 import Sidebar from '../../components/Sidebar';
 import { Layout } from 'antd';
+import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 export default function App() {
   const [health, setHealth] = useState<string>('Đang kiểm tra...');
@@ -24,7 +28,12 @@ export default function App() {
         <Sidebar collapsed={collapsed} onCollapse={setCollapsed} logoSrc="/Multimedia.png" />
         <Layout>
           <Navbar rightContent={null} />
-          <DashboardPage logoSrc="/Multimedia.png" />
+          <Routes>
+            <Route path="/" element={<DashboardPage logoSrc="/Multimedia.png" />} />
+            <Route path="/deadline" element={<DeadlinePage />} />
+            <Route path="/progress" element={<ProgressPage />} />
+            <Route path="/results" element={<ResultsPage />} />
+          </Routes>
         </Layout>
       </Layout>
     </div>
