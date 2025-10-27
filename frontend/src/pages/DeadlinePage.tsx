@@ -48,7 +48,7 @@ export default function DeadlinePage() {
 
   return (
     <div className="container">
-      <Typography.Title level={3} style={{ color: 'var(--color-secondary)', marginBottom: 16 }}>Tạo deadline môn học</Typography.Title>
+      <Typography.Title level={4} style={{ color: 'var(--color-secondary)', marginBottom: 16 }}>Tạo deadline môn học</Typography.Title>
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Card>
           <Form form={form} layout="vertical" onFinish={onSubmit}>
