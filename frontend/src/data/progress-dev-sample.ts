@@ -28,7 +28,7 @@ export const progressDevSample: ProgressData = {
         { code: 'INT1155', name: 'Tin học cơ sở 2', credit: 2 },
         { code: 'MUL13122', name: 'Kỹ thuật nhiếp ảnh', credit: 2 },
         { code: 'MUL13149', name: 'Mỹ thuật cơ bản', credit: 3 },
-        { code: 'MUL13150', name: 'Thiết kế đồ họa', credit: 2 }
+        { code: 'MUL13150', name: 'Thiết kế đồ họa', credit: 3 }
       ]
     },
     {
