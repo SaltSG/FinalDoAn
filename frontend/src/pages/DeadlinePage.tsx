@@ -201,7 +201,7 @@ export default function DeadlinePage() {
     {
       title: (
         <div className="deadline-table-header">
-          📚 Môn học
+          Môn học
         </div>
       ),
       dataIndex: 'subject',
@@ -219,7 +219,7 @@ export default function DeadlinePage() {
     {
       title: (
         <div className="deadline-table-header">
-          📝 Tiêu đề
+          Tiêu đề
         </div>
       ),
       dataIndex: 'title',
@@ -234,7 +234,7 @@ export default function DeadlinePage() {
     {
       title: (
         <div className="deadline-table-header">
-          🚀 Bắt đầu
+          Thời gian bắt đầu
         </div>
       ),
       dataIndex: 'startAt',
@@ -249,7 +249,7 @@ export default function DeadlinePage() {
     {
       title: (
         <div className="deadline-table-header">
-          ⏰ Kết thúc
+          Thời gian kết thúc
         </div>
       ),
       dataIndex: 'endAt',
@@ -264,7 +264,7 @@ export default function DeadlinePage() {
     {
       title: (
         <div className="deadline-table-header">
-          🏷️ Trạng thái
+          Trạng thái
         </div>
       ),
       dataIndex: 'status',
@@ -283,7 +283,7 @@ export default function DeadlinePage() {
     {
       title: (
         <div className="deadline-table-header">
-          ⚙️ Thao tác
+          Thao tác
         </div>
       ),
       key: 'actions',
@@ -325,17 +325,23 @@ export default function DeadlinePage() {
 
   return (
     <div className="deadline-page-container">
-      {/* Header Section */}
-      <div className="deadline-header">
-        <div className="deadline-header-circle-1" />
-        <div className="deadline-header-circle-2" />
-        <div className="deadline-header-content">
-          <Typography.Title level={2} className="deadline-title">
-            📅 Quản lý Deadline
-      </Typography.Title>
-          <Typography.Text className="deadline-subtitle">
-            Theo dõi và quản lý các deadline quan trọng của bạn
-          </Typography.Text>
+      {/* Stats Overview */}
+      <div className="deadline-stats-overview">
+        <div className="deadline-stats-card">
+          <div className="deadline-stats-number">{deadlines.length}</div>
+          <div className="deadline-stats-label">Tổng Deadline</div>
+        </div>
+        <div className="deadline-stats-card">
+          <div className="deadline-stats-number">{deadlines.filter(d => d.status === 'ongoing').length}</div>
+          <div className="deadline-stats-label">Sắp hết hạn</div>
+        </div>
+        <div className="deadline-stats-card">
+          <div className="deadline-stats-number">{deadlines.filter(d => d.status === 'overdue').length}</div>
+          <div className="deadline-stats-label">Quá hạn</div>
+        </div>
+        <div className="deadline-stats-card">
+          <div className="deadline-stats-number">{deadlines.filter(d => d.status === 'upcoming').length}</div>
+          <div className="deadline-stats-label">Sắp tới</div>
         </div>
       </div>
 
@@ -386,12 +392,11 @@ export default function DeadlinePage() {
       <div className="deadline-action-container">
         <Button 
           type="primary" 
-          icon={<PlusOutlined />} 
           onClick={handleAddNew}
           size="large"
           className="deadline-create-button"
         >
-          ✨ Tạo Deadline Mới
+          Tạo Deadline Mới
         </Button>
       </div>
 
@@ -403,7 +408,7 @@ export default function DeadlinePage() {
               <div className="deadline-card-icon">
                 <ClockCircleOutlined />
               </div>
-              📋 Danh sách Deadline 
+              Danh sách Deadline 
               <Tag 
                 color="blue" 
                 className="deadline-count-tag"
@@ -448,7 +453,7 @@ export default function DeadlinePage() {
                     <ClockCircleOutlined />
                   </div>
                   <div className="deadline-empty-title">
-                    📝 Chưa có deadline nào
+                    Chưa có deadline nào
                   </div>
                   <div className="deadline-empty-description">
                     Hãy tạo deadline đầu tiên để bắt đầu quản lý!
