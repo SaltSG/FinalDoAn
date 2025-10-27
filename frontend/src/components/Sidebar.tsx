@@ -11,13 +11,37 @@ type SidebarProps = {
 export default function Sidebar({ collapsed, onCollapse, logoSrc }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const selectedKeys = location.pathname.startsWith('/results') ? ['results'] : location.pathname.startsWith('/progress') ? ['progress'] : location.pathname.startsWith('/deadline') ? ['deadline'] : ['home'];
+  const selectedKeys = location.pathname.startsWith('/summary')
+    ? ['summary']
+    : location.pathname.startsWith('/results')
+    ? ['results']
+    : location.pathname.startsWith('/progress')
+    ? ['progress']
+    : location.pathname.startsWith('/deadline')
+    ? ['deadline']
+    : ['home'];
+
+  const items = [
+    { key: 'home', icon: <HomeOutlined />, label: 'Trang chủ' },
+    { key: 'deadline', icon: <ClockCircleOutlined />, label: 'Deadline' },
+    { key: 'progress', icon: <BarChartOutlined />, label: 'Tiến trình' },
+    {
+      key: 'study',
+      icon: <OrderedListOutlined />,
+      label: 'Học tập',
+      children: [
+        { key: 'results', label: 'Kết quả' },
+        { key: 'summary', label: 'Tính điểm môn học' },
+      ],
+    },
+  ];
+
   return (
     <Layout.Sider
       collapsible
       collapsed={collapsed}
       onCollapse={onCollapse}
-      width={280}
+      width={220}
       className="sider"
       theme="light"
     >
@@ -27,13 +51,17 @@ export default function Sidebar({ collapsed, onCollapse, logoSrc }: SidebarProps
       <Menu
         mode="inline"
         selectedKeys={selectedKeys}
-        onClick={(e) => navigate(e.key === 'home' ? '/' : `/${e.key}`)}
-      >
-        <Menu.Item key="home" icon={<HomeOutlined />}>Trang chủ</Menu.Item>
-        <Menu.Item key="deadline" icon={<ClockCircleOutlined />}>Deadline</Menu.Item>
-        <Menu.Item key="progress" icon={<BarChartOutlined />}>Tiến trình</Menu.Item>
-        <Menu.Item key="results" icon={<OrderedListOutlined />}>Kết quả</Menu.Item>
-      </Menu>
+        defaultOpenKeys={["study"]}
+        items={items}
+        onClick={(e) => {
+          const key = e.key;
+          if (key === 'home') navigate('/');
+          else if (key === 'deadline') navigate('/deadline');
+          else if (key === 'progress') navigate('/progress');
+          else if (key === 'results') navigate('/results');
+          else if (key === 'summary') navigate('/summary');
+        }}
+      />
     </Layout.Sider>
   );
 }

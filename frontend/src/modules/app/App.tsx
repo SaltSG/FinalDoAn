@@ -6,7 +6,8 @@ import ProgressPage from '../../pages/ProgressPage';
 import ResultsPage from '../../pages/ResultsPage';
 import Sidebar from '../../components/Sidebar';
 import { Layout } from 'antd';
-import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
+import SummaryPage from '../../pages/SummaryPage';
 
 export default function App() {
   const [health, setHealth] = useState<string>('Đang kiểm tra...');
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="/deadline" element={<DeadlinePage />} />
             <Route path="/progress" element={<ProgressPage />} />
             <Route path="/results" element={<ResultsPage />} />
+            <Route path="/summary" element={<SummaryPage />} />
           </Routes>
         </Layout>
       </Layout>
