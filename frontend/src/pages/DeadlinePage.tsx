@@ -12,6 +12,16 @@ type DeadlineFormValues = {
   note?: string;
 };
 
+type StoredDeadline = {
+  id: string;
+  subject: string;
+  title: string;
+  startAt: string | null;
+  endAt: string | null;
+  note: string;
+  done: boolean;
+};
+
 const SUBJECTS = [
   { value: 'mm101', label: 'MM101 - Nhập môn Multimedia' },
   { value: 'mm202', label: 'MM202 - Thiết kế đồ họa' },
@@ -25,21 +35,22 @@ export default function DeadlinePage() {
   const onSubmit = async (values: DeadlineFormValues) => {
     setSubmitting(true);
     try {
-      // Compose ISO strings for backend later
       const start = mergeDateTime(values.startDate, values.startTime);
       const end = mergeDateTime(values.endDate, values.endTime);
-      const payload = {
+      const payload: StoredDeadline = {
+        id: `${Date.now()}`,
         subject: values.subject,
         title: values.title,
         startAt: start?.toISOString() ?? null,
         endAt: end?.toISOString() ?? null,
-        note: values.note ?? ''
+        note: values.note ?? '',
+        done: false,
       };
-      // TODO: integrate POST /api/deadlines later
-      // await fetch('/api/deadlines', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      // For now, just log
-      // eslint-disable-next-line no-console
-      console.log('deadline.create', payload);
+      // Save to localStorage list for dashboard summary
+      const raw = localStorage.getItem('deadlines');
+      const list: StoredDeadline[] = raw ? JSON.parse(raw) : [];
+      list.push(payload);
+      localStorage.setItem('deadlines', JSON.stringify(list));
       form.resetFields();
     } finally {
       setSubmitting(false);
