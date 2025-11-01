@@ -1,11 +1,9 @@
-import { Card, Empty, Select, Space, Tag, Typography, Button, Modal, Tooltip } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
-import { ExclamationCircleOutlined, ExclamationCircleFilled } from '@ant-design/icons';
+import { Card, Empty, Segmented, Select, Space, Tag, Typography, Button, Modal } from 'antd';
+import { useMemo, useState } from 'react';
+import { progressDevSample } from '../data/progress-dev-sample';
+import { progressDesignSample } from '../data/progress-design-sample';
 import type { ProgressData, SemesterData, Specialization, SemesterKey } from '../types/progress';
 import { fourFrom10, letterFrom10 } from '../lib/grading';
-import { getAuthUser } from '../services/auth';
-import { fetchResults, fetchResultsMeta, saveSpecialization } from '../services/results';
-import { fetchCurriculum } from '../services/curriculum';
 
 // Types are imported from ../types/progress
 
@@ -18,107 +16,39 @@ const DEFAULT_SEMESTERS: { value: string; label: string }[] = Array.from({ lengt
 }));
 
 export default function ProgressPage() {
-  const [specialization, setSpecialization] = useState<Specialization>(() => {
-    try { const s = localStorage.getItem('specialization') as Specialization; if (s === 'dev' || s === 'design') return s; } catch {}
-    return 'dev';
-  });
+  const [specialization, setSpecialization] = useState<Specialization>('dev');
   const [semester, setSemester] = useState<SemesterKey | undefined>('HK1');
   const [showTrends, setShowTrends] = useState<boolean>(false);
-  const [showSpecNote, setShowSpecNote] = useState<boolean>(false);
 
-  const [base, setBase] = useState<ProgressData | undefined>(undefined);
+  // Placeholder: chờ dữ liệu thật từ bạn
+  const base: ProgressData | undefined = specialization === 'design' ? progressDesignSample : progressDevSample;
 
-  // Load curriculum by specialization
-  useEffect(() => {
-    try { localStorage.setItem('specialization', specialization); } catch {}
-    fetchCurriculum(specialization).then(setBase).catch(() => setBase(undefined));
-  }, [specialization]);
-
-  // On mount, if user has saved specialization in DB, use it
-  useEffect(() => {
-    const u = getAuthUser();
-    if (!u?.id) return;
-    fetchResultsMeta(u.id).then((meta) => {
-      if (meta.specialization === 'dev' || meta.specialization === 'design') {
-        setSpecialization(meta.specialization);
-        try { localStorage.setItem('specialization', meta.specialization); } catch {}
-      }
-    }).catch(() => {});
-  }, []);
-
-  const [override, setOverride] = useState<Record<string, Record<string, { grade?: number; status?: 'passed' | 'failed' | 'in-progress'; name?: string; credit?: number }>> | undefined>(() => {
-    try {
-      const raw = localStorage.getItem('progress.override');
-      if (!raw) return undefined;
-      const parsed = JSON.parse(raw) as { data?: Record<string, Record<string, { grade?: number; status?: 'passed' | 'failed' | 'in-progress'; name?: string; credit?: number }>> };
-      return parsed?.data;
-    } catch {
-      return undefined;
-    }
-  });
-
-  useEffect(() => {
-    const u = getAuthUser();
-    if (!u?.id) return;
-    fetchResults(u.id).then((serverData) => {
-      setOverride(serverData);
-      try { localStorage.setItem('progress.override', JSON.stringify({ data: serverData })); } catch {}
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const reload = () => {
-      const u = getAuthUser();
-      if (u?.id) {
-        fetchResults(u.id)
-          .then((serverData) => {
-            setOverride(serverData);
-            try { localStorage.setItem('progress.override', JSON.stringify({ data: serverData })); } catch {}
-          })
-          .catch(() => {
-            try {
-              const raw = localStorage.getItem('progress.override');
-              if (!raw) { setOverride(undefined); return; }
-              const parsed = JSON.parse(raw) as { data?: Record<string, Record<string, { grade?: number; status?: 'passed' | 'failed' | 'in-progress'; name?: string; credit?: number }>> };
-              setOverride(parsed?.data);
-            } catch {}
-          });
-      } else {
-        try {
-          const raw = localStorage.getItem('progress.override');
-          if (!raw) { setOverride(undefined); return; }
-          const parsed = JSON.parse(raw) as { data?: Record<string, Record<string, { grade?: number; status?: 'passed' | 'failed' | 'in-progress'; name?: string; credit?: number }>> };
-          setOverride(parsed?.data);
-        } catch {}
-      }
-    };
-    window.addEventListener('storage', reload);
-    window.addEventListener('progress-override-changed', reload as any);
-    return () => {
-      window.removeEventListener('storage', reload);
-      window.removeEventListener('progress-override-changed', reload as any);
-    };
-  }, []);
-
-  // Merge tạm thời các điểm được đồng bộ từ trang Kết quả (override) vào base
+  // Merge tạm thời các điểm được đồng bộ từ trang Kết quả (localStorage)
   const data: ProgressData | undefined = useMemo(() => {
     if (!base) return undefined;
-    if (!override) return base;
-    const copy: ProgressData = JSON.parse(JSON.stringify(base));
-    for (const sem of copy.semesters) {
-      const overSem = override[sem.semester];
-      if (!overSem) continue;
-      for (const c of sem.courses) {
-        const ov = overSem[c.code];
-        if (!ov) continue;
-        if (typeof ov.grade === 'number') c.grade = ov.grade;
-        if (ov.status) c.status = ov.status;
-        if (typeof ov.name === 'string') c.name = ov.name;
-        if (typeof ov.credit === 'number') c.credit = ov.credit;
+    try {
+      const raw = localStorage.getItem('progress.override');
+      if (!raw) return base;
+      const parsed = JSON.parse(raw) as { data?: Record<string, Record<string, { grade?: number; status?: 'passed' | 'failed' | 'in-progress'; name?: string; credit?: number }>> };
+      if (!parsed || !parsed.data) return base;
+      const copy: ProgressData = JSON.parse(JSON.stringify(base));
+      for (const sem of copy.semesters) {
+        const overSem = parsed.data[sem.semester];
+        if (!overSem) continue;
+        for (const c of sem.courses) {
+          const ov = overSem[c.code];
+          if (!ov) continue;
+          if (typeof ov.grade === 'number') c.grade = ov.grade;
+          if (ov.status) c.status = ov.status;
+          if (typeof ov.name === 'string') c.name = ov.name;
+          if (typeof ov.credit === 'number') c.credit = ov.credit;
+        }
       }
+      return copy;
+    } catch {
+      return base;
     }
-    return copy;
-  }, [base, override]);
+  }, [base]);
 
   const semesters: { value: string; label: string }[] = useMemo(() => {
     if (!data) return DEFAULT_SEMESTERS;
@@ -278,30 +208,11 @@ export default function ProgressPage() {
         </Typography.Title>
 
         <Space wrap>
-          <style>{`.spec-select .ant-select-selector { padding-left: 28px !important; }`}</style>
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <Select
-              className="spec-select"
-              style={{ minWidth: 220 }}
-              placeholder="Chọn chuyên ngành"
-              value={specialization}
-              onChange={(v) => {
-                setSpecialization(v as Specialization);
-                try { localStorage.setItem('specialization', v as string); } catch {}
-                const u = getAuthUser();
-                if (u?.id) saveSpecialization(u.id, v as 'dev' | 'design').catch(() => {});
-              }}
-              options={[
-                { value: 'dev', label: 'Phát triển ứng dụng ĐPT' },
-                { value: 'design', label: 'Thiết kế ĐPT' },
-              ]}
-            />
-            <div style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)' }} onMouseDown={(e) => e.stopPropagation()}>
-              <Tooltip title="Lưu ý: chọn chuyên ngành">
-                <ExclamationCircleFilled style={{ color: 'var(--color-secondary)', fontSize: 18, cursor: 'pointer' }} onClick={() => setShowSpecNote(true)} />
-              </Tooltip>
-            </div>
-          </div>
+          <Segmented
+            options={[{ value: 'dev', label: 'Phát triển ứng dụng ĐPT' }, { value: 'design', label: 'Thiết kế ĐPT' }]}
+            value={specialization}
+            onChange={(v) => setSpecialization(v as Specialization)}
+          />
           <Select
             style={{ minWidth: 220 }}
             placeholder="Chọn học kỳ (vd: 2023-2024-HK1)"
@@ -310,25 +221,6 @@ export default function ProgressPage() {
             onChange={setSemester}
           />
         </Space>
-
-        <Modal
-          title={<span style={{ color: 'var(--color-secondary)' }}>Lưu ý chọn chuyên ngành</span>}
-          open={showSpecNote}
-          onCancel={() => setShowSpecNote(false)}
-          footer={null}
-        >
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              <ExclamationCircleOutlined style={{ color: 'var(--color-secondary)', fontSize: 18, marginTop: 2 }} />
-              <Typography.Text style={{ color: 'var(--color-secondary)' }}>
-                Ngành Công nghệ Đa phương tiện học giống nhau từ kì 1 đến kì 4.
-              </Typography.Text>
-            </div>
-            <Typography.Text style={{ color: 'var(--color-secondary)' }}>
-              Bắt đầu từ kì 5 (tức là kì 1 năm 3) sẽ chọn chuyên ngành và học các môn theo chuyên ngành.
-            </Typography.Text>
-          </Space>
-        </Modal>
 
         {data && (
           <Card>
