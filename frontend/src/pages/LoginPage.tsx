@@ -1,13 +1,14 @@
 import { Button, Card, Form, Input, Space, Typography, message } from 'antd';
 import { GoogleOutlined, MailOutlined, LockOutlined } from '@ant-design/icons';
-import { useEffect, useState } from 'react';
-import { authUserFromGoogleCredential, getAuthUser, setAuthUser } from '../services/auth';
+import { useEffect, useRef, useState } from 'react';
+import { authUserFromGoogleCredential, getAuthUser, setAuthUser, setAuthToken } from '../services/auth';
 import { useNavigate } from 'react-router-dom';
 
 export default function LoginPage() {
   const [form] = Form.useForm();
   const navigate = useNavigate();
   const [mode, setMode] = useState<'login'|'register'>('login');
+  const gBtnRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!(window as any).google) {
@@ -19,39 +20,59 @@ export default function LoginPage() {
     }
   }, []);
 
+  function resolveApiBase(): string {
+    const env: any = (import.meta as any).env;
+    if (env?.VITE_API_BASE) return String(env.VITE_API_BASE).replace(/\/$/, '');
+    const isDev = typeof window !== 'undefined' && location.port === '5173';
+    return isDev ? 'http://127.0.0.1:5000' : '';
+  }
+  const API_BASE = resolveApiBase();
+
   async function postJson(path: string, body: any) {
-    const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   }
 
-  async function handleGoogleSignIn() {
-    const google = (window as any).google;
-    if (!google?.accounts?.id) {
-      message.warning('Đang tải dịch vụ Google, thử lại sau giây lát');
-      return;
-    }
-    google.accounts.id.initialize({
-      client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
-      callback: async (resp: any) => {
-        const decoded = authUserFromGoogleCredential(resp.credential);
-        if (!decoded) return;
-        try {
-          const rs = await postJson('/api/auth/google', {
-            email: decoded.email,
-            name: decoded.name,
-            picture: decoded.picture,
-            sub: decoded.id,
-          });
-          if (rs && rs.user) setAuthUser(rs.user);
-          navigate('/');
-        } catch (e: any) {
-          message.error('Đăng nhập Google thất bại');
-        }
+  // Tự động render nút Google "chính chủ" khi tab Đăng nhập mở và GSI sẵn sàng
+  useEffect(() => {
+    if (mode !== 'login') return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries++;
+      const google = (window as any).google;
+      if (!google?.accounts?.id || !gBtnRef.current) {
+        if (tries > 40) window.clearInterval(timer);
+        return;
       }
-    });
-    google.accounts.id.prompt();
-  }
+      const env: any = (import.meta as any).env;
+      const clientId = env?.VITE_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
+      try {
+        google.accounts.id.initialize({
+          client_id: clientId,
+          use_fedcm_for_prompt: false,
+          callback: async (resp: any) => {
+            try {
+              const rs = await postJson('/api/auth/google', { credential: resp.credential });
+              if (rs && rs.user) setAuthUser(rs.user);
+              if (rs && rs.token) setAuthToken(rs.token);
+              navigate('/');
+            } catch (e: any) {
+              try {
+                const json = JSON.parse(e?.message || '{}');
+                if (json?.message === 'forbidden') return message.error('Tài khoản Google này không được phép');
+                if (json?.message === 'invalid_credential') return message.error('Thông tin đăng nhập Google không hợp lệ');
+              } catch {}
+              message.error('Đăng nhập Google thất bại');
+            }
+          }
+        });
+        google.accounts.id.renderButton(gBtnRef.current, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', logo_alignment: 'left', width: 320 });
+        window.clearInterval(timer);
+      } catch {}
+    }, 150);
+    return () => { window.clearInterval(timer); };
+  }, [mode, navigate]);
 
   const onFinish = async (values: any) => {
     try {
@@ -61,6 +82,7 @@ export default function LoginPage() {
         : { email: values.email, password: values.password, name: values.fullName ?? values.email.split('@')[0], studentId: values.studentId };
       const rs = await postJson(path, payload);
       if (rs && rs.user) setAuthUser(rs.user);
+      if (rs && rs.token) setAuthToken(rs.token);
       navigate('/');
     } catch (e: any) {
       message.error(mode === 'login' ? 'Sai email hoặc mật khẩu' : 'Đăng ký thất bại (email có thể đã tồn tại)');
@@ -87,8 +109,8 @@ export default function LoginPage() {
         {mode === 'login' && (
           <>
             <div style={{ height: 12 }} />
-            <div className="auth-socials">
-              <button className="auth-social-btn" onClick={handleGoogleSignIn}><GoogleOutlined /> Google</button>
+            <div style={{ display: 'grid', placeItems: 'center' }}>
+              <div ref={gBtnRef} />
             </div>
             <div style={{ height: 12 }} />
             <div className="auth-divider"><span>hoặc</span></div>

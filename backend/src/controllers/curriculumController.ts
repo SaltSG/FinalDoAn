@@ -92,6 +92,23 @@ export const updateCourse: RequestHandler = async (req, res) => {
   return res.json({ ok: true, updated });
 };
 
+export const deleteCourse: RequestHandler = async (req, res) => {
+  const spec = String(req.params.spec);
+  const code = String(req.query.code || req.body?.code || '');
+  if (!code) return res.status(400).json({ message: 'code required' });
+  const doc = await Curriculum.findOne({ specialization: spec });
+  if (!doc) return res.status(404).json({ message: 'Curriculum not found' });
+
+  let removed = 0;
+  for (const sem of doc.semesters as any[]) {
+    const before = (sem.courses as any[]).length;
+    sem.courses = (sem.courses as any[]).filter((c: any) => c.code !== code);
+    removed += before - (sem.courses as any[]).length;
+  }
+  await doc.save();
+  return res.json({ ok: true, removed });
+};
+
 export const seed: RequestHandler = async (req, res) => {
   const force = Boolean(req.body?.force);
 

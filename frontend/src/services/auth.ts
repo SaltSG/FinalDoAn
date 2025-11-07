@@ -7,6 +7,7 @@ export type AuthUser = {
 };
 
 const LS_KEY = 'auth.user';
+const LS_TOKEN = 'auth.token';
 
 export function getAuthUser(): AuthUser | null {
   try {
@@ -21,6 +22,7 @@ export function getAuthUser(): AuthUser | null {
 export function setAuthUser(user: AuthUser | null) {
   if (!user) {
     localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(LS_TOKEN);
     return;
   }
   localStorage.setItem(LS_KEY, JSON.stringify(user));
@@ -28,6 +30,15 @@ export function setAuthUser(user: AuthUser | null) {
 
 export function signOut() {
   setAuthUser(null);
+}
+
+export function getAuthToken(): string | null {
+  try { return localStorage.getItem(LS_TOKEN); } catch { return null; }
+}
+
+export function setAuthToken(token: string | null) {
+  if (!token) { try { localStorage.removeItem(LS_TOKEN); } catch {} return; }
+  try { localStorage.setItem(LS_TOKEN, token); } catch {}
 }
 
 // Decode Google ID token (JWT) payload without verification (for demo only)

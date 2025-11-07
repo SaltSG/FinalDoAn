@@ -42,7 +42,12 @@ export async function updateCourseInCurriculum(
   return res.json();
 }
 
-import type { ProgressData } from '../types/progress';
+export async function deleteCourseInCurriculum(spec: 'dev' | 'design', code: string) {
+  const url = `/api/curriculum/${encodeURIComponent(spec)}/course?code=${encodeURIComponent(code)}`;
+  const res = await fetch(url, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
 
 export type CurriculumCourse = {
   code: string;

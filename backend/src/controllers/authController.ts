@@ -1,6 +1,13 @@
 import { RequestHandler } from 'express';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
+import { OAuth2Client } from 'google-auth-library';
+
+function signJwt(user: { id: string; name?: string; email?: string }) {
+  const secret = process.env.JWT_SECRET || 'dev_secret_change_me';
+  return jwt.sign({ id: user.id, name: user.name, email: user.email }, secret, { expiresIn: '7d' });
+}
 
 export const register: RequestHandler = async (req, res) => {
   const { email, name, password } = req.body ?? {};
@@ -9,7 +16,9 @@ export const register: RequestHandler = async (req, res) => {
   if (existing) return res.status(409).json({ message: 'Email already exists' });
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await User.create({ email, name: name ?? email.split('@')[0], passwordHash, provider: 'local' });
-  return res.json({ user: { id: user.id, email: user.email, name: user.name, provider: user.provider, picture: user.picture } });
+  const userDto = { id: user.id, email: user.email, name: user.name, provider: user.provider, picture: user.picture };
+  const token = signJwt(userDto);
+  return res.json({ user: userDto, token });
 };
 
 export const login: RequestHandler = async (req, res) => {
@@ -18,17 +27,44 @@ export const login: RequestHandler = async (req, res) => {
   if (!user || !user.passwordHash) return res.status(401).json({ message: 'Invalid credentials' });
   const ok = await (await import('bcryptjs')).compare(password, user.passwordHash);
   if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
-  return res.json({ user: { id: user.id, email: user.email, name: user.name, provider: user.provider, picture: user.picture } });
+  const userDto = { id: user.id, email: user.email, name: user.name, provider: user.provider, picture: user.picture };
+  const token = signJwt(userDto);
+  return res.json({ user: userDto, token });
 };
 
 export const googleSignIn: RequestHandler = async (req, res) => {
-  const { email, name, picture } = req.body ?? {};
-  if (!email) return res.status(400).json({ message: 'email required' });
-  let user = await User.findOne({ email });
-  if (!user) {
-    user = await User.create({ email, name: name ?? email.split('@')[0], provider: 'google', picture });
+  // Expect Google ID token from client (Google Identity Services)
+  const { credential } = req.body ?? {};
+  if (!credential) return res.status(400).json({ message: 'credential required' });
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) return res.status(500).json({ message: 'server_not_configured' });
+
+  try {
+    const client = new OAuth2Client(clientId);
+    const ticket = await client.verifyIdToken({ idToken: String(credential), audience: clientId });
+    const payload = ticket.getPayload();
+    const email = payload?.email;
+    const name = payload?.name || (email ? email.split('@')[0] : 'User');
+    const picture = payload?.picture;
+    if (!email) return res.status(401).json({ message: 'unauthorized' });
+
+    // Restrict to one allowed email only
+    const allowed = (process.env.ALLOWED_GOOGLE_EMAIL || '').toLowerCase();
+    if (!allowed || email.toLowerCase() !== allowed) {
+      return res.status(403).json({ message: 'forbidden' });
+    }
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = await User.create({ email, name, provider: 'google', picture });
+    }
+    const userDto = { id: user.id, email: user.email, name: user.name, provider: user.provider, picture: user.picture };
+    const token = signJwt(userDto);
+    return res.json({ user: userDto, token });
+  } catch (e) {
+    return res.status(401).json({ message: 'invalid_credential' });
   }
-  return res.json({ user: { id: user.id, email: user.email, name: user.name, provider: user.provider, picture: user.picture } });
 };
 
 export const resetPassword: RequestHandler = async (req, res) => {
