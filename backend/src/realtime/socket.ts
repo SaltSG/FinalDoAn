@@ -15,7 +15,7 @@ type ServerToClientEvents = {
 };
 
 type ClientToServerEvents = {
-  'chat:send': (payload: { room?: string; content: string }, cb?: (err?: string) => void) => void;
+  'chat:send': (payload: { room?: string; content?: string; attachment?: { url: string; name: string; size: number; mimeType?: string } }, cb?: (err?: string) => void) => void;
   'chat:join': (room: string, cb?: (ok: boolean) => void) => void;
   'chat:leave': (room: string, cb?: (ok: boolean) => void) => void;
   'chat:typing': (payload: { room: string; typing: boolean }) => void;
@@ -109,14 +109,34 @@ export async function initializeSocket(httpServer: HttpServer) {
       socket.to(room || 'global').emit('chat:typing', { room: room || 'global', userId, userName, typing: !!typing });
     });
 
-    socket.on('chat:send', async ({ room, content }, cb) => {
-      const text = (content || '').trim();
-      if (!text) return cb?.('empty');
+    socket.on('chat:send', async ({ room, content, attachment }, cb) => {
+      const hasAttachment = !!attachment && !!attachment.url;
+      const text = String(content || '').trim();
+      if (!hasAttachment && !text) return cb?.('empty');
       const ok = await checkRateLimit(userId, 'message', 5, 1);
       if (!ok) return cb?.('rate_limited');
       try {
-        const doc = await ChatMessage.create({ room: room || 'global', userId, userName: user.name, content: text });
-        const payload = { _id: doc._id, room: doc.room, userId: doc.userId, userName: doc.userName, content: doc.content, createdAt: doc.createdAt };
+        const doc = await ChatMessage.create({
+          room: room || 'global',
+          userId,
+          userName: user.name,
+          content: hasAttachment && !text ? (attachment?.name || 'Tệp đính kèm') : text,
+          attachment: hasAttachment ? {
+            url: String(attachment!.url),
+            name: String(attachment!.name || ''),
+            size: Number(attachment!.size || 0),
+            mimeType: attachment!.mimeType ? String(attachment!.mimeType) : undefined,
+          } : undefined,
+        });
+        const payload = {
+          _id: doc._id,
+          room: doc.room,
+          userId: doc.userId,
+          userName: doc.userName,
+          content: doc.content,
+          attachment: doc.attachment,
+          createdAt: doc.createdAt,
+        };
         io.to(doc.room).emit('chat:message', payload);
         cb?.();
       } catch (e: any) {

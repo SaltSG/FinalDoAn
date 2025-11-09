@@ -1,6 +1,8 @@
 import { RequestHandler } from 'express';
 import { ChatMessage } from '../models/ChatMessage';
 import { ChatRead } from '../models/ChatRead';
+import path from 'path';
+import { buildPublicUrl } from '../utils/upload';
 
 // In-memory SSE clients per room
 type Client = { id: string; res: any };
@@ -39,7 +41,10 @@ export const listMessages: RequestHandler = async (req, res) => {
 };
 
 export const sendMessage: RequestHandler = async (req, res) => {
-  const { room = 'global', userId, userName, content } = req.body || {};
+  const { room = 'global', content } = req.body || {};
+  const user = (req as any).user as { id: string; name?: string; email?: string } | undefined;
+  const userId = user?.id;
+  const userName = user?.name || user?.email;
   if (!userId || !content) return res.status(400).json({ message: 'userId and content required' });
   const doc = await ChatMessage.create({ room, userId, userName, content });
   const payload = { _id: doc._id, room, userId, userName, content, createdAt: doc.createdAt };
@@ -69,6 +74,23 @@ export const markRead: RequestHandler = async (req, res) => {
     { upsert: true, new: true }
   ).lean();
   res.json({ ok: true, data: { room, userId, lastReadAt: doc?.lastReadAt || now } });
+};
+
+export const uploadFile: RequestHandler = async (req, res) => {
+  const userId = String((req as any).user?.id || '');
+  if (!userId) return res.status(401).json({ message: 'unauthorized' });
+  const f = (req as any).file as Express.Multer.File | undefined;
+  if (!f) return res.status(400).json({ message: 'file_required' });
+  const url = buildPublicUrl(path.basename(f.filename || f.originalname));
+  return res.json({
+    ok: true,
+    file: {
+      url,
+      name: f.originalname,
+      size: f.size,
+      mimeType: f.mimetype,
+    },
+  });
 };
 
 

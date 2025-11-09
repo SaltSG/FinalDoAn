@@ -61,11 +61,11 @@ export function subscribeToRoom(room: string, handlers: Handlers = {}): () => vo
   };
 }
 
-export function sendChat(room: string, content: string): Promise<void> {
+export function sendChat(room: string, content?: string, attachment?: { url: string; name: string; size: number; mimeType?: string }): Promise<void> {
   return new Promise((resolve, reject) => {
     const socket = getSocket();
     if (!socket) return reject(new Error('socket_unavailable'));
-    socket.emit('chat:send', { room, content }, (err?: string) => {
+    socket.emit('chat:send', { room, content, attachment }, (err?: string) => {
       if (err) reject(new Error(err)); else resolve();
     });
   });

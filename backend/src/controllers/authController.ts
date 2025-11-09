@@ -49,10 +49,15 @@ export const googleSignIn: RequestHandler = async (req, res) => {
     const picture = payload?.picture;
     if (!email) return res.status(401).json({ message: 'unauthorized' });
 
-    // Restrict to one allowed email only
-    const allowed = (process.env.ALLOWED_GOOGLE_EMAIL || '').toLowerCase();
-    if (!allowed || email.toLowerCase() !== allowed) {
-      return res.status(403).json({ message: 'forbidden' });
+    // Allow all emails if no allowlist is configured.
+    // If ALLOWED_GOOGLE_EMAIL is set, support comma-separated list and domain patterns like '@example.com'.
+    const allowEnv = (process.env.ALLOWED_GOOGLE_EMAIL || '').trim();
+    if (allowEnv) {
+      const emailLc = email.toLowerCase();
+      const items = allowEnv.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const domain = emailLc.substring(emailLc.indexOf('@'));
+      const allowed = items.some((it) => it === emailLc || (it.startsWith('@') && it === domain));
+      if (!allowed) return res.status(403).json({ message: 'forbidden' });
     }
 
     let user = await User.findOne({ email });

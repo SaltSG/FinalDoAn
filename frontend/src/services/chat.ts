@@ -4,6 +4,14 @@ export type ChatMessageDto = {
   userId: string;
   userName?: string;
   content: string;
+  attachment?: {
+    url: string;
+    name: string;
+    size: number;
+    mimeType?: string;
+    width?: number;
+    height?: number;
+  };
   createdAt: string;
 };
 
@@ -41,8 +49,8 @@ export async function fetchMessages(room = 'global', limit = 100): Promise<ChatM
   return (rs?.data as ChatMessageDto[]) || [];
 }
 
-export async function sendMessage(room: string, userId: string, userName: string | undefined, content: string): Promise<ChatMessageDto> {
-  const rs = await postJson('/api/chat/send', { room, userId, userName, content });
+export async function sendMessage(room: string, content: string): Promise<ChatMessageDto> {
+  const rs = await postJson('/api/chat/send', { room, content });
   return rs.data as ChatMessageDto;
 }
 
@@ -67,6 +75,50 @@ export async function getUnreadCount(room: string): Promise<{ unread: number; la
 
 export async function markRead(room: string): Promise<void> {
   await postJson('/api/chat/read', { room });
+}
+
+export type UploadedFile = { url: string; name: string; size: number; mimeType?: string };
+
+export async function uploadChatFile(file: File, onProgress?: (percent: number) => void): Promise<UploadedFile> {
+  const token = getAuthToken();
+  const url = `${API_BASE}/api/chat/upload`;
+  return new Promise<UploadedFile>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.onload = () => {
+      try {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data?.file as UploadedFile);
+        } else {
+          reject(new Error(xhr.responseText || 'upload_failed'));
+        }
+      } catch (e: any) {
+        reject(e);
+      }
+    };
+    xhr.onerror = () => reject(new Error('network_error'));
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (evt) => {
+        if (!evt.lengthComputable) return;
+        const p = Math.round((evt.loaded / evt.total) * 100);
+        onProgress(p);
+      };
+    }
+    const fd = new FormData();
+    fd.append('file', file);
+    xhr.send(fd);
+  });
+}
+
+export function resolveFileUrl(url: string): string {
+  if (!url) return url;
+  const abs = url.startsWith('http://') || url.startsWith('https://');
+  if (abs) return url;
+  // In dev, prefer proxy via the same origin for assets like /uploads to avoid odd cross-origin issues
+  if (url.startsWith('/uploads')) return url;
+  return `${API_BASE}${url}`;
 }
 
 

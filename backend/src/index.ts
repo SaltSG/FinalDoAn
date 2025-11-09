@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import path from 'path';
 import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -15,7 +16,10 @@ import { initializeSocket } from './realtime/socket';
 
 const app = express();
 
-app.use(helmet({ crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' } }));
+app.use(helmet({
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  crossOriginEmbedderPolicy: false
+}));
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
@@ -30,6 +34,15 @@ connectMongo(MONGO_URI).catch((err: any) => {
 app.get('/api/health', async (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), mongo: mongoose.connection.readyState });
 });
+
+// Static serving for uploaded files
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve(process.cwd(), 'uploads');
+app.use('/uploads', express.static(UPLOAD_DIR, {
+  fallthrough: true,
+  index: false,
+  dotfiles: 'ignore',
+  maxAge: '1d',
+}));
 
 // Routes
 app.use('/api/auth', authRouter);
