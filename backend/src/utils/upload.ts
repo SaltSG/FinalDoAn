@@ -24,8 +24,12 @@ export const upload = multer({
 });
 
 export function buildPublicUrl(filename: string): string {
-  // Serve via /uploads
-  return `/uploads/${encodeURIComponent(filename)}`;
+  // Serve via /uploads. If PUBLIC_BASE_URL is set, return absolute URL so other machines can access.
+  const base = (process.env.PUBLIC_BASE_URL || '').toString().trim();
+  const pathPart = `/uploads/${encodeURIComponent(filename)}`;
+  if (!base) return pathPart;
+  const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
+  return `${normalized}${pathPart}`;
 }
 
 
