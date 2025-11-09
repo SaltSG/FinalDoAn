@@ -274,4 +274,408 @@ body { margin: 0; }
   font-size: 14px;
 }
 
+/* Auth page (login/register) */
+.auth-wrapper { 
+  display: grid; 
+  place-items: center; 
+  min-height: calc(100vh - 64px);
+  padding: 24px;
+  background: linear-gradient(180deg, rgba(31,59,91,0.04), rgba(245,158,11,0.04));
+}
+.auth-card {
+  width: 460px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(17, 24, 39, 0.12);
+  padding: 20px 20px 24px;
+  animation: auth-fade-up 360ms ease both;
+}
+@keyframes auth-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.auth-title {
+  text-align: center;
+  margin: 8px 0 2px 0;
+  background: linear-gradient(90deg, #1f3b5b, #f59e0b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.auth-subtitle { text-align: center; color: #6b7280; }
 
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.auth-tab {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fafafa;
+  color: #374151;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+.auth-tab:hover { background: #f3f4f6; }
+.auth-tab.active {
+  background: linear-gradient(90deg, #1f3b5b, #f59e0b);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(31,59,91,0.25);
+}
+
+.auth-divider { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; color: #9ca3af; }
+.auth-divider::before, .auth-divider::after { content: ''; height: 1px; background: #e5e7eb; display: block; }
+
+/* Center the socials row even with single button */
+.auth-socials { display: flex; justify-content: center; gap: 12px; }
+.auth-social-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 16px; background: #fff;
+  min-width: 240px;
+  transition: transform 120ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.auth-social-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); border-color: #d1d5db; }
+.auth-social-btn:active { transform: translateY(0); box-shadow: none; }
+
+.auth-submit {
+  width: 100%;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #1f3b5b, #f59e0b);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  transition: filter 160ms ease, transform 120ms ease;
+}
+.auth-submit:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.auth-submit:active { transform: translateY(0); }
+
+.auth-forgot { text-align: right; font-size: 13px; color: #ef4444; cursor: pointer; }
+.auth-forgot:hover { text-decoration: underline; }
+
+/* User dropdown trigger animation */
+.user-trigger { transition: transform 140ms ease, filter 160ms ease; }
+.user-trigger:hover { transform: translateY(-1px); filter: brightness(1.05); }
+
+/* Dropdown overlay pop-in */
+.ant-dropdown .ant-dropdown-menu { 
+  animation: dropdown-pop 160ms cubic-bezier(.21,1.02,.73,1) both;
+  transform-origin: top right;
+}
+@keyframes dropdown-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Rotating caret for user dropdown */
+.caret { transition: transform 180ms ease; }
+.caret.rotated { transform: rotate(180deg); }
+
+/* Deadline Page (Ant Design-friendly) */
+.deadline-page-container {
+  background: #f8f9fa;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+/* Stats Overview */
+.deadline-stats-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+  /* Styles mapped for AntD Statistic inside Card */
+}
+
+/* Use this class directly on AntD Card: <Card className="deadline-stats-card"/> */
+.deadline-stats-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+}
+.deadline-stats-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+/* AntD Statistic mapping */
+.deadline-stats-card .ant-statistic-title,
+.deadline-stats-label {
+  font-size: 14px;
+  color: #636e72;
+  font-weight: 500;
+}
+.deadline-stats-card .ant-statistic-content-value,
+.deadline-stats-number {
+  font-size: 32px;
+  font-weight: 700;
+  color: #2d3436;
+  margin-bottom: 8px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .deadline-page-container { padding: 16px; }
+  .deadline-stats-overview { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .deadline-stats-card { padding: 16px; }
+  .deadline-stats-card .ant-statistic-content-value,
+  .deadline-stats-number { font-size: 24px; }
+  .deadline-card-body { padding: 20px; }
+  .deadline-modal-title { font-size: 18px; }
+}
+@media (max-width: 480px) {
+  .deadline-stats-overview { grid-template-columns: 1fr; }
+}
+
+/* Header Section */
+.deadline-header {
+  background: #f59e0b;
+  border-radius: 16px;
+  padding: 32px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 32px rgba(245, 158, 11, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+.deadline-header-circle-1 {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 200px;
+  height: 200px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  z-index: 1;
+}
+.deadline-header-circle-2 {
+  position: absolute;
+  bottom: -30px;
+  left: -30px;
+  width: 150px;
+  height: 150px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  z-index: 1;
+}
+.deadline-header-content { position: relative; z-index: 2; }
+.deadline-title {
+  color: white;
+  margin-bottom: 8px;
+  font-weight: 700;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+.deadline-subtitle { color: rgba(255, 255, 255, 0.9); font-size: 16px; font-weight: 500; }
+
+/* Alert Section: apply to AntD Alert with className="deadline-alert" */
+.deadline-alert {
+  background: #ff6b6b;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 32px rgba(255, 107, 107, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+.deadline-alert-circle {
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 100px;
+  height: 100px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  z-index: 1;
+}
+.deadline-alert-content { position: relative; z-index: 2; }
+.deadline-alert-title {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #d63031;
+}
+.deadline-alert-description { font-size: 16px; color: #2d3436; margin-bottom: 12px; }
+.deadline-alert-count { color: #d63031; }
+.deadline-alert-list { margin-left: 20px; }
+.deadline-alert-item {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.deadline-alert-item-title { color: #2d3436; }
+.deadline-alert-item-time { font-size: 14px; color: #636e72; }
+.deadline-alert-more { font-size: 14px; color: #636e72; font-style: italic; margin-top: 8px; }
+
+/* Action Button: apply to AntD Button with className="deadline-create-button" */
+.deadline-action-container { margin-bottom: 24px; text-align: right; position: relative; }
+.deadline-create-button {
+  background: #f59e0b;
+  border: none;
+  border-radius: 12px;
+  height: 48px;
+  padding-left: 24px;
+  padding-right: 24px;
+  font-weight: 600;
+  font-size: 16px;
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+}
+.deadline-create-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(245, 158, 11, 0.6);
+}
+
+/* Card Container: apply to AntD Card with className="deadline-card" */
+.deadline-card {
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  border: none;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+/* Modal: wrapClassName="deadline-modal" on AntD Modal */
+.deadline-modal .ant-modal-content { border-radius: 16px; }
+.deadline-modal .ant-modal-title { font-weight: 800; color: var(--color-secondary); }
+
+/* Deadline: additional elements moved from per-page CSS */
+.deadline-card-header {
+  background: #f8f9fa;
+  border-bottom: 3px solid #f59e0b;
+  border-radius: 20px 20px 0 0;
+  padding: 24px 32px;
+  margin: 0;
+}
+.deadline-card-body {
+  padding: 32px;
+  background: transparent;
+}
+.deadline-card-title {
+  display: flex;
+  align-items: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #2d3436;
+}
+.deadline-card-icon {
+  background: #f59e0b;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+.deadline-card-icon svg { color: #fff; font-size: 18px; }
+.deadline-count-tag {
+  margin-left: 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 4px 12px;
+}
+
+/* Table Styles */
+.deadline-table { border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.deadline-table-header {
+  font-weight: 700;
+  font-size: 16px;
+  color: #2d3436;
+  display: flex;
+  align-items: center;
+}
+.deadline-subject-cell {
+  font-weight: 600;
+  color: #2d3436;
+  font-size: 14px;
+  padding: 8px 12px;
+  background: #e3f2fd;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+.deadline-title-cell { font-weight: 600; font-size: 15px; color: #2d3436; padding: 8px 0; }
+.deadline-time-cell { font-size: 13px; color: #636e72; font-weight: 500; padding: 8px 12px; border-radius: 6px; }
+.deadline-time-cell.has-time { background: #e8f5e8; border: 1px solid rgba(46, 204, 113, 0.2); }
+.deadline-end-time-cell.has-time { background: #fff3e0; border: 1px solid rgba(255, 152, 0, 0.2); }
+.deadline-status-tag { font-weight: 700; font-size: 13px; border-radius: 12px; padding: 6px 16px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+/* Row actions */
+.deadline-edit-button {
+  color: #f59e0b;
+  font-size: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #e3f2fd;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.deadline-delete-button {
+  font-size: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #ffebee;
+  border: 1px solid rgba(244, 67, 54, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Empty state */
+.deadline-empty-state { padding: 80px 0; text-align: center; background: #f8f9fa; border-radius: 12px; margin: 20px 0; }
+.deadline-empty-icon {
+  background: #f59e0b;
+  border-radius: 50%;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.3);
+}
+.deadline-empty-icon svg { font-size: 40px; color: #fff; }
+.deadline-empty-title { font-size: 20px; color: #2d3436; font-weight: 600; margin-bottom: 8px; }
+.deadline-empty-description { font-size: 16px; color: #636e72; margin-bottom: 20px; }
+.deadline-empty-button { background: #f59e0b; border: none; border-radius: 8px; height: 40px; padding-left: 20px; padding-right: 20px; font-weight: 600; color: #fff; }
+
+/* Modal extras */
+.deadline-modal-icon {
+  background: #f59e0b;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+.deadline-modal-icon svg { color: #fff; font-size: 16px; }
+.deadline-modal-cancel-button { border-radius: 8px; height: 40px; padding-left: 20px; padding-right: 20px; font-weight: 600; }
+.deadline-modal-submit-button { background: #f59e0b; border: none; border-radius: 8px; height: 40px; padding-left: 20px; padding-right: 20px; font-weight: 600; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3); color: #fff; }
+
+/* Row states */
+.deadline-row-overdue { background: #ffebee; }
+.deadline-row-ongoing { background: #fff3e0; }
+.deadline-row-normal { background: transparent; }
+.deadline-row-overdue:hover,
+.deadline-row-ongoing:hover,
+.deadline-row-normal:hover { background: #f8f9fa; }
