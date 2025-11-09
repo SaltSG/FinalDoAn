@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   Button, 
   Card, 
@@ -14,25 +15,24 @@ import {
   Modal, 
   Row, 
   Col, 
-  Alert,
   Popconfirm,
-  Tooltip,
-  Collapse
+  Tooltip
 } from 'antd';
 import { 
   PlusOutlined, 
   EditOutlined, 
   DeleteOutlined, 
   ClockCircleOutlined,
-  ExclamationCircleOutlined,
-  CalendarOutlined
+  CalendarOutlined,
+  FilterOutlined,
+  DownOutlined
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
-import './DeadlinePage.css';
+import { getAuthUser } from '../services/auth';
+import { fetchDeadlines as apiFetchDeadlines, createDeadline as apiCreateDeadline, updateDeadline as apiUpdateDeadline, deleteDeadline as apiDeleteDeadline } from '../services/deadlines';
 
 
 type DeadlineFormValues = {
-  subject: string;
   title: string;
   startDate?: Dayjs;
   startTime?: Dayjs;
@@ -43,7 +43,6 @@ type DeadlineFormValues = {
 
 type Deadline = {
   id: string;
-  subject: string;
   title: string;
   startAt: string | null;
   endAt: string | null;
@@ -52,56 +51,55 @@ type Deadline = {
   status: 'upcoming' | 'ongoing' | 'overdue' | 'completed';
 };
 
-const SUBJECTS = [
-  { value: 'mm101', label: 'MM101 - Nhập môn Multimedia' },
-  { value: 'mm202', label: 'MM202 - Thiết kế đồ họa' },
-  { value: 'mm303', label: 'MM303 - Biên tập video' }
-];
+// No subject selection anymore
 
 export default function DeadlinePage() {
+  const location = useLocation();
   const [form] = Form.useForm<DeadlineFormValues>();
   const [submitting, setSubmitting] = useState(false);
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingDeadline, setEditingDeadline] = useState<Deadline | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'incomplete' | 'completed' | 'upcoming' | 'ongoing' | 'overdue'>('all');
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
-  // Load deadlines from localStorage on component mount
+  // Sync initial filter from query string if provided (e.g., ?status=ongoing)
   useEffect(() => {
-    console.log('Component mounted, loading from localStorage...');
-    const savedDeadlines = localStorage.getItem('deadlines');
-    if (savedDeadlines) {
-      try {
-        const parsed = JSON.parse(savedDeadlines);
-        const deadlinesWithStatus = parsed.map((d: any) => ({
-          ...d,
-          status: getDeadlineStatus(d.endAt)
-        }));
-        setDeadlines(deadlinesWithStatus);
-        console.log('Loaded deadlines from localStorage:', deadlinesWithStatus);
-      } catch (error) {
-        console.error('Error loading deadlines:', error);
-      }
-    } else {
-      console.log('No saved deadlines found in localStorage');
-    }
-  }, []);
+    const qs = new URLSearchParams(location.search);
+    const st = (qs.get('status') || '').toLowerCase();
+    const allowed = new Set(['all','incomplete','completed','upcoming','ongoing','overdue']);
+    if (st && allowed.has(st) && st !== statusFilter) setStatusFilter(st as any);
+  }, [location.search]);
 
-  // Save deadlines to localStorage whenever deadlines change (but not on initial load)
+  // Load from API (server-side filter & createdAt desc)
   useEffect(() => {
-    if (deadlines.length > 0) {
-    localStorage.setItem('deadlines', JSON.stringify(deadlines));
-      console.log('Saved deadlines to localStorage:', deadlines);
-    }
-  }, [deadlines]);
+    const u = getAuthUser();
+    if (!u?.id) return;
+    const statusParam = statusFilter === 'all' ? undefined : statusFilter;
+    apiFetchDeadlines(u.id, statusParam as any)
+      .then((rs) => {
+        const mapped = rs.map((d) => ({
+          id: d._id,
+          title: d.title,
+          startAt: d.startAt ?? null,
+          endAt: d.endAt ?? null,
+          note: d.note || '',
+          createdAt: d.createdAt,
+          status: d.status,
+        } as Deadline));
+        setDeadlines(mapped);
+        setPage(1);
+      })
+      .catch(() => {});
+  }, [statusFilter]);
 
-  const getDeadlineStatus = (endAt: string | null): Deadline['status'] => {
-    if (!endAt) return 'upcoming';
+  const getDeadlineStatus = (startAt: string | null, endAt: string | null): Deadline['status'] => {
     const now = dayjs();
-    const end = dayjs(endAt);
-    const diffHours = end.diff(now, 'hours');
-    
-    if (diffHours < 0) return 'overdue';
-    if (diffHours <= 24) return 'ongoing';
+    const start = startAt ? dayjs(startAt) : null;
+    const end = endAt ? dayjs(endAt) : null;
+    if (end && now.isAfter(end)) return 'overdue';
+    if (start && end && now.isAfter(start) && now.isBefore(end)) return 'ongoing';
     return 'upcoming';
   };
 
@@ -131,33 +129,41 @@ export default function DeadlinePage() {
       const start = mergeDateTime(values.startDate, values.startTime);
       const end = mergeDateTime(values.endDate, values.endTime);
       
-      const newDeadline: Deadline = {
-        id: editingDeadline?.id || Date.now().toString(),
-        subject: values.subject,
-        title: values.title,
-        startAt: start?.toISOString() ?? null,
-        endAt: end?.toISOString() ?? null,
-        note: values.note ?? '',
-        createdAt: editingDeadline?.createdAt || new Date().toISOString(),
-        status: getDeadlineStatus(end?.toISOString() ?? null)
-      };
-
+      const u = getAuthUser();
+      if (!u?.id) return;
       if (editingDeadline) {
-        setDeadlines(prev => {
-          const updated = prev.map(d => d.id === editingDeadline.id ? newDeadline : d);
-          // Manually save to localStorage
-          localStorage.setItem('deadlines', JSON.stringify(updated));
-          console.log('Updated deadline and saved to localStorage');
-          return updated;
+        const updated = await apiUpdateDeadline(u.id, editingDeadline.id, {
+          title: values.title,
+          startAt: start?.toISOString() ?? null,
+          endAt: end?.toISOString() ?? null,
+          note: values.note ?? '',
         });
+        setDeadlines(prev => prev.map(d => d.id === editingDeadline.id ? {
+          id: updated._id,
+          title: updated.title,
+          startAt: updated.startAt ?? null,
+          endAt: updated.endAt ?? null,
+          note: updated.note || '',
+          createdAt: updated.createdAt,
+          status: updated.status,
+        } : d));
       } else {
-        setDeadlines(prev => {
-          const updated = [...prev, newDeadline];
-          // Manually save to localStorage
-          localStorage.setItem('deadlines', JSON.stringify(updated));
-          console.log('Added new deadline and saved to localStorage');
-          return updated;
+        const created = await apiCreateDeadline(u.id, {
+          title: values.title,
+          startAt: start?.toISOString() ?? null,
+          endAt: end?.toISOString() ?? null,
+          note: values.note ?? '',
         });
+        setDeadlines(prev => [{
+          id: created._id,
+          title: created.title,
+          startAt: created.startAt ?? null,
+          endAt: created.endAt ?? null,
+          note: created.note || '',
+          createdAt: created.createdAt,
+          status: created.status,
+        }, ...prev]);
+        setPage(1);
       }
 
       form.resetFields();
@@ -171,7 +177,6 @@ export default function DeadlinePage() {
   const handleEdit = (deadline: Deadline) => {
     setEditingDeadline(deadline);
     form.setFieldsValue({
-      subject: deadline.subject,
       title: deadline.title,
       startDate: deadline.startAt ? dayjs(deadline.startAt) : undefined,
       startTime: deadline.startAt ? dayjs(deadline.startAt) : undefined,
@@ -182,14 +187,11 @@ export default function DeadlinePage() {
     setIsModalVisible(true);
   };
 
-  const handleDelete = (id: string) => {
-    setDeadlines(prev => {
-      const updated = prev.filter(d => d.id !== id);
-      // Manually save to localStorage
-      localStorage.setItem('deadlines', JSON.stringify(updated));
-      console.log('Deleted deadline and saved to localStorage');
-      return updated;
-    });
+  const handleDelete = async (id: string) => {
+    const u = getAuthUser();
+    if (!u?.id) return;
+    await apiDeleteDeadline(u.id, id).catch(() => {});
+    setDeadlines(prev => prev.filter(d => d.id !== id));
   };
 
   const handleAddNew = () => {
@@ -198,24 +200,48 @@ export default function DeadlinePage() {
     setIsModalVisible(true);
   };
 
+  const handleCompletionChange = async (id: string, value: 'completed' | 'incomplete' | 'ongoing') => {
+    const u = getAuthUser();
+    if (!u?.id) return;
+    const cur = deadlines.find(d => d.id === id);
+    if (!cur) return;
+    const updated = await apiUpdateDeadline(u.id, id, {
+      status: value === 'completed' ? 'completed' : (value === 'ongoing' ? 'ongoing' : undefined),
+      // if 'incomplete', omit status to let server compute from times
+      startAt: cur.startAt,
+      endAt: cur.endAt,
+    }).catch(() => null);
+    if (updated) {
+      setDeadlines(prev => prev.map(d => d.id === id ? {
+        id: updated._id,
+        title: updated.title,
+        startAt: updated.startAt ?? null,
+        endAt: updated.endAt ?? null,
+        note: updated.note || '',
+        createdAt: updated.createdAt,
+        status: updated.status,
+      } : d));
+    }
+  };
+
+  const applyFilters = (items: Deadline[]) => items; // server already filtered
+
+  const sequenceMap = useMemo(() => {
+    const sorted = [...deadlines].sort((a, b) => dayjs(a.createdAt).valueOf() - dayjs(b.createdAt).valueOf());
+    const map: Record<string, number> = {};
+    sorted.forEach((d, idx) => { map[d.id] = idx + 1; });
+    return map;
+  }, [deadlines]);
+
   const columns = [
     {
       title: (
-        <div className="deadline-table-header">
-          Môn học
-        </div>
+        <div className="deadline-table-header">STT</div>
       ),
-      dataIndex: 'subject',
-      key: 'subject',
-      width: 220,
-      render: (subject: string) => {
-        const subjectInfo = SUBJECTS.find(s => s.value === subject);
-        return (
-          <div className="deadline-subject-cell">
-            {subjectInfo?.label || subject}
-          </div>
-        );
-      }
+      key: 'index',
+      width: 70,
+      align: 'center' as const,
+      render: (_: any, record: Deadline) => sequenceMap[record.id] ?? 0
     },
     {
       title: (
@@ -225,6 +251,8 @@ export default function DeadlinePage() {
       ),
       dataIndex: 'title',
       key: 'title',
+      width: 180,
+      align: 'center' as const,
       ellipsis: true,
       render: (title: string) => (
         <div className="deadline-title-cell">
@@ -240,7 +268,8 @@ export default function DeadlinePage() {
       ),
       dataIndex: 'startAt',
       key: 'startAt',
-      width: 160,
+      width: 220,
+      align: 'center' as const,
       render: (startAt: string | null) => (
         <div className={`deadline-time-cell ${startAt ? 'has-time' : ''}`}>
           {startAt ? dayjs(startAt).format('DD/MM/YYYY HH:mm') : 'Chưa có'}
@@ -255,7 +284,8 @@ export default function DeadlinePage() {
       ),
       dataIndex: 'endAt',
       key: 'endAt',
-      width: 160,
+      width: 220,
+      align: 'center' as const,
       render: (endAt: string | null) => (
         <div className={`deadline-time-cell deadline-end-time-cell ${endAt ? 'has-time' : ''}`}>
           {endAt ? dayjs(endAt).format('DD/MM/YYYY HH:mm') : 'Chưa có'}
@@ -268,18 +298,26 @@ export default function DeadlinePage() {
           Trạng thái
         </div>
       ),
-      dataIndex: 'status',
       key: 'status',
-      width: 140,
+      width: 180,
       align: 'center' as const,
-      render: (status: Deadline['status']) => (
-        <Tag 
-          color={getStatusColor(status)} 
-          className="deadline-status-tag"
-        >
-          {getStatusText(status)}
-        </Tag>
-      )
+      render: (_: any, record: Deadline) => {
+        const effective = record.status === 'completed' ? 'completed' : getDeadlineStatus(record.startAt, record.endAt);
+        const selectValue = effective === 'completed' ? 'completed' : (effective === 'ongoing' ? 'ongoing' : 'incomplete');
+        return (
+          <Select
+            className="deadline-status-select"
+            value={selectValue}
+            style={{ width: 160, display: 'block', margin: '0 auto' }}
+            onChange={(v: 'completed' | 'incomplete' | 'ongoing') => handleCompletionChange(record.id, v)}
+            options={[
+              { value: 'ongoing', label: (<span className="status-pill status-blue">Đang diễn ra</span>) },
+              { value: 'completed', label: (<span className="status-pill status-green">Đã hoàn thành</span>) },
+              { value: 'incomplete', label: (<span className="status-pill status-yellow">Không hoàn thành</span>) }
+            ]}
+          />
+        );
+      }
     },
     {
       title: (
@@ -288,7 +326,7 @@ export default function DeadlinePage() {
         </div>
       ),
       key: 'actions',
-      width: 140,
+      width: 160,
       align: 'center' as const,
       render: (_: any, record: Deadline) => (
         <Space>
@@ -321,11 +359,12 @@ export default function DeadlinePage() {
     }
   ];
 
-  // Get upcoming deadlines for alert
-  const upcomingDeadlines = deadlines.filter(d => d.status === 'ongoing' || d.status === 'overdue');
-
   return (
     <div className="deadline-page-container">
+      {/* Page title top-left */}
+      <div style={{ marginBottom: 12 }}>
+        <Typography.Title level={4} style={{ margin: 0, color: '#2d3436' }}>Danh sách Deadline</Typography.Title>
+      </div>
       {/* Stats Overview */}
       <div className="deadline-stats-overview">
         <div className="deadline-stats-card">
@@ -334,108 +373,80 @@ export default function DeadlinePage() {
         </div>
         <div className="deadline-stats-card">
           <div className="deadline-stats-number">{deadlines.filter(d => d.status === 'ongoing').length}</div>
-          <div className="deadline-stats-label">Sắp hết hạn</div>
+          <div className="deadline-stats-label">Đang diễn ra</div>
         </div>
         <div className="deadline-stats-card">
-          <div className="deadline-stats-number">{deadlines.filter(d => d.status === 'overdue').length}</div>
-          <div className="deadline-stats-label">Quá hạn</div>
+          <div className="deadline-stats-number">{deadlines.filter(d => d.status === 'completed').length}</div>
+          <div className="deadline-stats-label">Hoàn thành</div>
         </div>
         <div className="deadline-stats-card">
-          <div className="deadline-stats-number">{deadlines.filter(d => d.status === 'upcoming').length}</div>
-          <div className="deadline-stats-label">Sắp tới</div>
+          <div className="deadline-stats-number">{deadlines.filter(d => d.status !== 'completed').length}</div>
+          <div className="deadline-stats-label">Không hoàn thành</div>
         </div>
       </div>
 
-      {/* Alert for upcoming deadlines */}
-      {upcomingDeadlines.length > 0 && (
-        <div className="deadline-alert">
-          <div className="deadline-alert-circle" />
-          <div className="deadline-alert-content">
-            <div className="deadline-alert-title">
-              <ExclamationCircleOutlined style={{ marginRight: '8px', fontSize: '20px' }} />
-              ⚠️ Nhắc nhở Deadline
-            </div>
-            <div className="deadline-alert-description">
-              Bạn có <strong className="deadline-alert-count">{upcomingDeadlines.length}</strong> deadline sắp hết hạn hoặc quá hạn:
-            </div>
-            <div className="deadline-alert-list">
-              {upcomingDeadlines.slice(0, 3).map(deadline => (
-                <div key={deadline.id} className="deadline-alert-item">
-                  <div>
-                    <strong className="deadline-alert-item-title">{deadline.title}</strong>
-                    <div className="deadline-alert-item-time">
-                      {dayjs(deadline.endAt).format('DD/MM/YYYY HH:mm')}
-                    </div>
-                  </div>
-                  <Tag 
-                    color={getStatusColor(deadline.status)} 
-                    style={{ 
-                      fontWeight: '600',
-                      borderRadius: '12px',
-                      padding: '4px 12px'
-                    }}
-                  >
-                    {getStatusText(deadline.status)}
-                  </Tag>
-                </div>
-              ))}
-              {upcomingDeadlines.length > 3 && (
-                <div className="deadline-alert-more">
-                  ... và {upcomingDeadlines.length - 3} deadline khác
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Nhắc nhở Deadline — đã bỏ theo yêu cầu */}
 
-      {/* Add New Deadline Button */}
-      <div className="deadline-action-container">
-        <Button 
-          type="primary" 
-          onClick={handleAddNew}
-          size="large"
-          className="deadline-create-button"
-        >
-          Tạo Deadline Mới
-        </Button>
-      </div>
+      {/* Main list card */}
 
       {/* Deadline Table */}
       <div>
         <Card 
           title={
-            <div className="deadline-card-title">
-              <div className="deadline-card-icon">
-                <ClockCircleOutlined />
-              </div>
-              Danh sách Deadline 
-              <Tag 
-                color="blue" 
-                className="deadline-count-tag"
-              >
-                {deadlines.length} deadline
-              </Tag>
-            </div>
+            <span className="filter-select-wrap">
+              <FilterOutlined className="filter-select-icon" />
+              <Select
+                className="filter-select"
+                value={statusFilter}
+                style={{ width: 200 }}
+                onChange={(v) => setStatusFilter(v)}
+                options={[
+                  { value: 'all', label: 'Tất cả' },
+                  { value: 'incomplete', label: 'Không hoàn thành' },
+                  { value: 'completed', label: 'Đã hoàn thành' },
+                  { value: 'ongoing', label: 'Đang diễn ra' }
+                ]}
+              />
+            </span>
+          }
+          extra={
+            <Button 
+              type="primary" 
+              onClick={handleAddNew}
+              size="middle"
+              className="deadline-create-button"
+              style={{ height: 36, paddingLeft: 16, paddingRight: 16 }}
+            >
+              Tạo Deadline Mới
+            </Button>
           }
           className="deadline-card"
-          headStyle={{ 
-            background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
-            borderBottom: '3px solid #667eea',
-            borderRadius: '20px 20px 0 0',
-            padding: '24px 32px',
-            margin: 0
-          }}
-          bodyStyle={{ 
-            padding: '32px',
-            background: 'transparent'
+          styles={{
+            header: {
+              background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+              borderBottom: '0',
+              borderRadius: '20px 20px 0 0',
+              padding: '24px 32px',
+              margin: 0
+            },
+            body: {
+              padding: '32px',
+              background: 'transparent'
+            }
           }}
         >
           <Table
             columns={columns}
-            dataSource={deadlines}
+            dataSource={useMemo(() => applyFilters(deadlines), [deadlines, statusFilter])}
             rowKey="id"
-            pagination={false}
+            pagination={{
+              current: page,
+              pageSize,
+              showSizeChanger: true,
+              pageSizeOptions: [5, 10, 20],
+              onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+              position: ['bottomRight']
+            }}
             scroll={{ x: 800 }}
             size="middle"
             bordered={false}
@@ -493,7 +504,7 @@ export default function DeadlinePage() {
         footer={null}
         width={650}
         style={{ top: 20 }}
-        destroyOnClose
+        destroyOnHidden
         styles={{
           header: {
             background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
@@ -507,10 +518,6 @@ export default function DeadlinePage() {
         }}
       >
         <Form form={form} layout="vertical" onFinish={onSubmit} size="middle">
-          <Form.Item name="subject" label="Môn học" rules={[{ required: true, message: 'Chọn môn học' }]}>
-            <Select placeholder="Chọn môn" options={SUBJECTS} showSearch allowClear />
-          </Form.Item>
-
           <Form.Item name="title" label="Tiêu đề" rules={[{ required: true, message: 'Nhập tiêu đề' }]}>
             <Input placeholder="Ví dụ: Bài tập chương 2" />
           </Form.Item>
@@ -570,6 +577,7 @@ export default function DeadlinePage() {
           </Form.Item>
         </Form>
       </Modal>
+
     </div>
   );
 }

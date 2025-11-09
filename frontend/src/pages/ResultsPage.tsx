@@ -1,7 +1,10 @@
-import { Button, Card, Descriptions, Input, InputNumber, Modal, Form, Select, Space, Tag, Typography, List, Avatar } from 'antd';
+import { Button, Card, Descriptions, Input, InputNumber, Modal, Form, Select, Space, Tag, Typography, List, Avatar, Popconfirm } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
-import { progressDevSample } from '../data/progress-dev-sample';
 import { fourFrom10, letterFrom10, letterTo10, letterTo4, rankFrom4, type Letter } from '../lib/grading';
+import { getAuthUser } from '../services/auth';
+import { saveResults, fetchResults } from '../services/results';
+import { fetchResultsMeta } from '../services/results';
+import { fetchCurriculum, addCourseToCurriculum, updateCourseInCurriculum, deleteCourseInCurriculum } from '../services/curriculum';
 import type { CourseResult, ProgressData, SemesterData } from '../types/progress';
 import { DeleteOutlined, EditOutlined, PlusOutlined, AimOutlined } from '@ant-design/icons';
 
@@ -27,27 +30,48 @@ const TARGETS: { value: TargetKey; label: string; threshold4: number }[] = [
 ];
 
 export default function ResultsPage() {
-  const baseData: ProgressData = progressDevSample; // sau tích hợp API sẽ lấy theo user
-  const [semesterKey, setSemesterKey] = useState<string>(baseData.semesters[0]?.semester || 'HK1');
+  const [specialization, setSpecialization] = useState<'dev' | 'design'>(() => {
+    try {
+      const s = localStorage.getItem('specialization') as any;
+      return (s === 'design' || s === 'dev') ? s : 'dev';
+    } catch {
+      return 'dev';
+    }
+  });
+  const [baseData, setBaseData] = useState<ProgressData | undefined>(undefined);
+  const [semesterKey, setSemesterKey] = useState<string>('HK1');
   const [target, setTarget] = useState<TargetKey | undefined>(undefined);
   const [locked, setLocked] = useState<{ target: TargetKey; suggestions: string[]; items: { code: string; name: string; toLetter: Letter; credit: number }[] } | null>(null);
 
-  const semesterList = baseData.semesters.map((s) => ({ value: s.semester, label: s.semester }));
+  const semesterList = (baseData?.semesters ?? []).map((s) => ({ value: s.semester, label: s.semester }));
   const initialCourses = useMemo<EditableCourse[]>(() => {
-    const current = baseData.semesters.find((s) => s.semester === semesterKey) as SemesterData;
+    const current = (baseData?.semesters || []).find((s) => s.semester === semesterKey) as SemesterData;
     return (current?.courses || []).map((c, idx) => ({ id: `${c.code}-${idx}`, ...c, gradeLetter: gradeToLetter(c.grade) as any, improve: 'none' as const }));
   }, [baseData, semesterKey]);
 
-  const [courses, setCourses] = useState<EditableCourse[]>(initialCourses);
   const [semCourses, setSemCourses] = useState<Record<string, EditableCourse[]>>(() => {
     try {
       const saved = localStorage.getItem('results.semCourses');
       if (saved) return JSON.parse(saved);
     } catch {}
-    return { [semesterKey]: initialCourses };
+    return {};
+  });
+  const [courses, setCourses] = useState<EditableCourse[]>(() => {
+    try {
+      const saved = localStorage.getItem('results.semCourses');
+      if (saved) {
+        const parsed = JSON.parse(saved) as Record<string, EditableCourse[]>;
+        if (parsed && parsed[semesterKey]) return parsed[semesterKey];
+      }
+    } catch {}
+    return [];
   });
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [addForm] = Form.useForm<{ name: string; credit: number }>();
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editForm] = Form.useForm<{ name: string; credit: number }>();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   // helper màu tag theo letter
   const letterTagColor = (l: Letter) => {
@@ -57,7 +81,7 @@ export default function ResultsPage() {
 
   // cập nhật khi đổi học kỳ
   const mapFromBase = (v: string) => {
-    const current = baseData.semesters.find((s) => s.semester === v) as SemesterData;
+    const current = (baseData?.semesters || []).find((s) => s.semester === v) as SemesterData;
     return (current?.courses || []).map((c, idx) => ({ id: `${c.code}-${idx}`, ...c, gradeLetter: gradeToLetter(c.grade) as any }));
   };
 
@@ -70,11 +94,84 @@ export default function ResultsPage() {
     setSemesterKey(v);
   };
 
+  // Tải chương trình đào tạo từ DB theo chuyên ngành
+  useEffect(() => {
+    try { localStorage.setItem('specialization', specialization); } catch {}
+    fetchCurriculum(specialization).then((data) => {
+      setBaseData(data);
+      const first = data.semesters[0]?.semester;
+      if (first) setSemesterKey(first);
+      // luôn đồng bộ toàn bộ học kỳ từ curriculum (không dùng dữ liệu mẫu/đã lưu cũ)
+      const mapped: Record<string, EditableCourse[]> = {};
+      for (const sem of data.semesters) {
+        mapped[sem.semester] = sem.courses.map((c, idx) => ({ id: `${c.code}-${idx}`, ...c })) as any;
+      }
+      setSemCourses(mapped);
+      try { localStorage.setItem('results.semCourses', JSON.stringify(mapped)); } catch {}
+      setCourses(mapped[first] || []);
+    }).catch(() => {
+      // leave empty if fail
+    });
+  }, [specialization]);
+
+  // Đồng bộ chuyên ngành từ server (nếu có) nhưng không hiển thị dropdown
+  useEffect(() => {
+    const u = getAuthUser();
+    if (!u?.id) return;
+    fetchResultsMeta(u.id).then((m) => {
+      if (m.specialization === 'dev' || m.specialization === 'design') {
+        setSpecialization(m.specialization);
+        try { localStorage.setItem('specialization', m.specialization); } catch {}
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Tải override từ server khi có user đăng nhập và hydrate vào semCourses + courses + localStorage
+  useEffect(() => {
+    const u = getAuthUser();
+    if (!u?.id || !baseData) return;
+    fetchResults(u.id).then((serverData) => {
+      try {
+        const next: Record<string, EditableCourse[]> = { ...semCourses };
+        const semKeys = new Set<string>([
+          ...Object.keys(serverData || {}),
+          ...(baseData?.semesters || []).map((s) => s.semester),
+        ]);
+        for (const hk of semKeys) {
+          const baseList = next[hk] ?? mapFromBase(hk);
+          const over = (serverData as any)?.[hk];
+          if (!over) { next[hk] = baseList; continue; }
+          const mapped = baseList.map((c) => {
+            const ov = over[(c as any).code];
+            if (!ov) return c;
+            const g = typeof ov.grade === 'number' ? ov.grade : undefined;
+            const gradeLetter = g !== undefined ? (gradeToLetter(g) as any) : (c as any).gradeLetter;
+            // Luôn lấy name/credit từ curriculum để đảm bảo đồng bộ DB
+            const credit = (c as any).credit;
+            const name = (c as any).name;
+            return { ...c, gradeLetter, credit, name } as EditableCourse;
+          });
+          next[hk] = mapped;
+        }
+        setSemCourses(next);
+        // Nếu đang ở học kỳ hiện tại, cập nhật courses
+        setCourses(next[semesterKey] ?? mapFromBase(semesterKey));
+        localStorage.setItem('results.semCourses', JSON.stringify(next));
+        // Ghi đồng bộ override theo format Progress/Dashboard đang dùng
+        const payload: Record<string, Record<string, { grade?: number; status?: 'passed' | 'failed' | 'in-progress'; name?: string; credit?: number }>> = serverData || {};
+        localStorage.setItem('progress.override', JSON.stringify({ data: payload }));
+        try { window.dispatchEvent(new Event('progress-override-changed')); } catch {}
+      } catch {}
+    }).catch(() => {}).finally(() => { setHydrated(true); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseData]);
+
   // Tự động đồng bộ dữ liệu sang Tiến trình để test
   useEffect(() => {
+    if (!hydrated || !baseData) return;
     try {
       const payload: Record<string, Record<string, { grade?: number; status?: 'passed' | 'failed' | 'in-progress'; name?: string; credit?: number }>> = {};
-      const allSems = new Set<string>([...Object.keys(semCourses), ...baseData.semesters.map(s => s.semester)]);
+      const allSems = new Set<string>([...Object.keys(semCourses), ...(baseData?.semesters || []).map(s => s.semester)]);
       for (const semKey of allSems) {
         const list = semKey === semesterKey ? courses : (semCourses[semKey] ?? mapFromBase(semKey));
         if (!list) continue;
@@ -86,12 +183,28 @@ export default function ResultsPage() {
             grade = letterTo10[(bestLetter as Letter)] as number;
           }
           const status: 'passed' | 'failed' | 'in-progress' | undefined = grade === undefined ? undefined : (grade >= 4 ? 'passed' : 'failed');
-          payload[semKey][(c as any).code] = { grade, status, name: (c as any).name, credit: (c as any).credit };
+          // Chỉ lưu grade/status vào override; name/credit lấy từ curriculum DB
+          payload[semKey][(c as any).code] = { grade, status } as any;
         }
       }
-      localStorage.setItem('progress.override', JSON.stringify({ data: payload }));
+      const dataObj = { data: payload };
+      localStorage.setItem('progress.override', JSON.stringify(dataObj));
+      // Broadcast to other pages within the app
+      try { window.dispatchEvent(new Event('progress-override-changed')); } catch {}
+      // Persist to server if logged in
+      const u = getAuthUser();
+      if (u?.id) {
+        saveResults(u.id, payload).catch(() => {/* ignore network errors for now */});
+      }
     } catch {}
-  }, [courses, semCourses, semesterKey]);
+  }, [courses, semCourses, semesterKey, hydrated, baseData]);
+
+  // Hydration: nếu đã đăng nhập, đợi tải override từ server xong mới bật auto-save
+  useEffect(() => {
+    const u = getAuthUser();
+    if (!u?.id) { setHydrated(true); return; }
+    // Nếu đã đăng nhập, việc setHydrated(true) được thực hiện trong fetchResults effect sau khi áp dụng dữ liệu
+  }, []);
 
   const updateCourse = (id: string, patch: Partial<EditableCourse>) => {
     setCourses((prev) => {
@@ -102,16 +215,24 @@ export default function ResultsPage() {
   };
 
   const addCourse = (name: string, credit: number) => {
+    const code = `CUST-${Date.now()}`;
     setCourses((prev) => {
-      const next = [ ...prev, { id: `new-${Date.now()}`, code: 'NEW', name, credit, gradeLetter: undefined } ];
+      const next = [ ...prev, { id: `new-${Date.now()}`, code, name, credit, gradeLetter: undefined } ];
       setSemCourses((map) => ({ ...map, [semesterKey]: next }));
       return next;
     });
+    // Persist to curriculum DB as well
+    addCourseToCurriculum(specialization, semesterKey, { code, name, credit }).catch(() => {/* ignore for now */});
   };
 
   const removeCourse = (id: string) => setCourses((prev) => {
+    const target = prev.find((c) => c.id === id);
     const next = prev.filter((c) => c.id !== id);
     setSemCourses((map) => ({ ...map, [semesterKey]: next }));
+    // Persist deletion to curriculum DB if course has a code
+    if (target?.code) {
+      deleteCourseInCurriculum(specialization, target.code).catch(() => {/* ignore for now */});
+    }
     return next;
   });
 
@@ -156,7 +277,8 @@ export default function ResultsPage() {
 
     // cumulative (dùng baseData + override của học kỳ đang chọn)
     let totalCr = 0; let earnedCr = 0; let cumCrForGpa = 0; let cumSum10 = 0; let cumSum4 = 0;
-    for (const sem of baseData.semesters) {
+    const baseSemesters = baseData?.semesters ?? [];
+    for (const sem of baseSemesters) {
       const list: (CourseResult | EditableCourse)[] =
         sem.semester === semesterKey
           ? courses
@@ -205,60 +327,57 @@ export default function ResultsPage() {
   const goalSuggestions = useMemo(() => {
     if (!target) return { need: 0, suggestions: [] as string[], items: [] as { code: string; name: string; toLetter: Letter; credit: number }[], reached: false };
     const threshold = TARGETS.find((t) => t.value === target)!.threshold4;
-    const current = semStats.cum4;
-    if (current >= threshold) return { need: 0, suggestions: ["Bạn đã đạt mục tiêu 🎉"], items: [], reached: true };
 
-    // Khoảng thiếu để đạt mục tiêu, tính theo tổng hiện tại
-    let denom = semStats.cumCrForGpa || 0; // tổng tín chỉ đang được tính GPA
-    let sum4 = semStats.cumSum4 || 0;      // tổng (điểm hệ 4 × tín chỉ) hiện tại
-    let gap = threshold * denom - sum4;    // cần bù thêm (điểm*tc) để đạt threshold trên mẫu hiện tại
+    // Nếu đã đạt mục tiêu rồi
+    if ((semStats.cumCrForGpa || 0) > 0 && (semStats.cum4 || 0) >= threshold) {
+      return { need: 0, suggestions: ["Bạn đã đạt mục tiêu 🎉"], items: [], reached: true };
+    }
+
+    // Nếu chưa có tín chỉ tích lũy (tân sinh viên): gợi ý cùng một mức tối thiểu cho TẤT CẢ môn của kỳ hiện tại
+    if ((semStats.cumCrForGpa || 0) === 0) {
+      const curCourses = courses.filter((c) => (c as any).countInGpa !== false);
+      const curCr = curCourses.reduce((s, c) => s + ((c as any).credit || 0), 0);
+      if (curCr === 0) return { need: 0, suggestions: [], items: [], reached: false };
+      let reqAvg4 = threshold; // toàn bộ mẫu = tín chỉ kỳ này
+      reqAvg4 = Math.max(1.0, Math.min(4.0, +reqAvg4.toFixed(2)));
+      const rung4eq: { val: number; letter: Letter }[] = [
+        { val: 1.0, letter: 'D' }, { val: 1.5, letter: 'D+' }, { val: 2.0, letter: 'C' }, { val: 2.5, letter: 'C+' },
+        { val: 3.0, letter: 'B' }, { val: 3.5, letter: 'B+' }, { val: 3.7, letter: 'A' }, { val: 4.0, letter: 'A+' },
+      ];
+      const letter = (rung4eq.find((r) => r.val >= reqAvg4) || rung4eq[rung4eq.length - 1]).letter;
+      const items = curCourses.map((c) => ({ code: (c as any).code, name: (c as any).name, credit: (c as any).credit || 0, toLetter: letter }));
+      const suggestions = items.map((p) => `Mục tiêu ${p.code} – ${p.name}: ≥ ${p.toLetter} (~${letterTo10[p.toLetter]}/10)`);
+      return { need: 0, suggestions, items, reached: false };
+    }
+
+    // Trường hợp đã qua nhiều học kỳ: gợi ý cải thiện nhiều môn (đa học kỳ) tối ưu để đạt mục tiêu
+    let denom = semStats.cumCrForGpa || 0;
+    let sum4 = semStats.cumSum4 || 0;
+    let gap = threshold * denom - sum4;
 
     const semNumOf = (hk: string) => {
-      const m = hk.match(/HK(\d+)/i);
-      return m ? parseInt(m[1], 10) : 0;
+      const m = hk.match(/HK(\d+)/i); return m ? parseInt(m[1], 10) : 0;
     };
     const currentNum = semNumOf(semesterKey);
 
     const rung4: { val: number; letter: Letter }[] = [
-      { val: 2.0, letter: 'C' },
-      { val: 2.5, letter: 'C+' },
-      { val: 3.0, letter: 'B' },
-      { val: 3.5, letter: 'B+' },
-      { val: 3.7, letter: 'A' },
-      { val: 4.0, letter: 'A+' },
+      { val: 2.0, letter: 'C' }, { val: 2.5, letter: 'C+' }, { val: 3.0, letter: 'B' }, { val: 3.5, letter: 'B+' }, { val: 3.7, letter: 'A' }, { val: 4.0, letter: 'A+' },
     ];
-
-    type State = {
-      code: string;
-      name: string;
-      credit: number;
-      base4: number;
-      counted: boolean;
-      level: number;
-      suggested?: number;
-      isLow: boolean;
-    };
+    type State = { code: string; name: string; credit: number; base4: number; counted: boolean; level: number; suggested?: number; isLow: boolean };
     const states: State[] = [];
 
-    for (const sem of baseData.semesters) {
-      const semNum = semNumOf(sem.semester);
-      if (semNum > currentNum) continue;
-      const list: (CourseResult | EditableCourse)[] =
-        sem.semester === semesterKey
-          ? courses
-          : ((semCourses[sem.semester] as (EditableCourse[] | undefined)) ?? mapFromBase(sem.semester));
+    const baseSemesters2 = baseData?.semesters ?? [];
+    for (const sem of baseSemesters2) {
+      const semNum = semNumOf(sem.semester); if (semNum > currentNum) continue;
+      const list: (CourseResult | EditableCourse)[] = sem.semester === semesterKey ? courses : ((semCourses[sem.semester] as (EditableCourse[] | undefined)) ?? mapFromBase(sem.semester));
       const isCurrentSem = semNum === currentNum;
-
       for (const c of list) {
-        const countGpa = (c as any).countInGpa !== false;
-        if (!countGpa) continue;
+        const countGpa = (c as any).countInGpa !== false; if (!countGpa) continue;
         const credit = (c as any).credit || 0;
         const hasLetters = (c as any).gradeLetter !== undefined || (c as any).improveGradeLetter !== undefined;
         const hasRaw = (c as CourseResult).grade !== undefined;
-        if (!isCurrentSem && !(hasLetters || hasRaw)) continue;
-
-        let best4 = 0;
-        let best10: number | undefined = undefined;
+        if (!isCurrentSem && !(hasLetters || hasRaw)) continue; // chỉ xét môn đã có điểm ở kỳ trước
+        let best4 = 0; let best10: number | undefined = undefined;
         if (hasLetters) {
           const _c = c as any as EditableCourse & { improveGradeLetter?: Letter };
           const gMain4 = _c.gradeLetter ? letterTo4[_c.gradeLetter] : -1;
@@ -268,80 +387,32 @@ export default function ResultsPage() {
           const gImp10 = _c.improveGradeLetter ? letterTo10[_c.improveGradeLetter] : -1;
           best10 = Math.max(gMain10, gImp10);
         } else {
-          const g10raw = (c as CourseResult).grade;
-          best10 = g10raw;
-          best4 = g10raw !== undefined ? (gradeToFour(g10raw) ?? 0) : 0;
+          const g10raw = (c as CourseResult).grade; best10 = g10raw; best4 = g10raw !== undefined ? (gradeToFour(g10raw) ?? 0) : 0;
         }
         const counted = (best10 ?? 0) >= 4;
-
-        states.push({
-          code: (c as any).code,
-          name: (c as any).name,
-          credit,
-          base4: best4,
-          counted,
-          level: best4,
-          suggested: undefined,
-          isLow: best4 <= 2.5,
-        });
+        states.push({ code: (c as any).code, name: (c as any).name, credit, base4: best4, counted, level: best4, isLow: best4 <= 2.5 });
       }
     }
-
-    if (states.length === 0) {
-      return { need: +gap.toFixed(2), suggestions: [], items: [], reached: false };
-    }
+    if (!states.length) return { need: +gap.toFixed(2), suggestions: [], items: [], reached: false };
 
     const nextStep = (s: State): { nextVal: number; letter: Letter; dSum: number; dDen: number } | null => {
-      const cand = rung4.find((r) => r.val > s.level) || null;
-      if (!cand) return null;
-      const dVal = cand.val - s.level;
-      const dSum = dVal * s.credit;
-      const dDen = s.counted ? 0 : s.credit;
-      return { nextVal: cand.val, letter: cand.letter, dSum, dDen };
+      const cand = rung4.find((r) => r.val > s.level) || null; if (!cand) return null;
+      const dVal = cand.val - s.level; const dSum = dVal * s.credit; const dDen = s.counted ? 0 : s.credit; return { nextVal: cand.val, letter: cand.letter, dSum, dDen };
     };
-
-    const chosen: Record<string, Letter> = {};
     const bias = (s: State) => (s.isLow ? 0.0001 : 0);
-
     let safety = 0;
     while (gap > 1e-6 && safety < 1000) {
       safety++;
-      let bestIdx = -1;
-      let bestScore = -Infinity;
-      let bestStep: { nextVal: number; letter: Letter; dSum: number; dDen: number } | null = null;
-
+      let bestIdx = -1; let bestScore = -Infinity; let bestStep: { nextVal: number; letter: Letter; dSum: number; dDen: number } | null = null;
       for (let i = 0; i < states.length; i++) {
-        const s = states[i];
-        const step = nextStep(s);
-        if (!step) continue;
-        const score = (step.dSum - threshold * step.dDen) + bias(s);
-        if (score > bestScore) {
-          bestScore = score;
-          bestIdx = i;
-          bestStep = step;
-        }
+        const s = states[i]; const step = nextStep(s); if (!step) continue; const score = (step.dSum - threshold * step.dDen) + bias(s);
+        if (score > bestScore) { bestScore = score; bestIdx = i; bestStep = step; }
       }
-
       if (bestIdx === -1 || !bestStep) break;
-
-      const s = states[bestIdx];
-      s.level = bestStep.nextVal;
-      s.suggested = bestStep.nextVal;
-      if (!s.counted && bestStep.dDen > 0) s.counted = true;
-
-      denom += bestStep.dDen;
-      sum4 += bestStep.dSum;
-      gap = threshold * denom - sum4;
-
-      chosen[s.code] = rung4.find((r) => r.val === s.suggested)!.letter;
+      const s = states[bestIdx]; s.level = bestStep.nextVal; s.suggested = bestStep.nextVal; if (!s.counted && bestStep.dDen > 0) s.counted = true; denom += bestStep.dDen; sum4 += bestStep.dSum; gap = threshold * denom - sum4;
     }
-
-    const items = states
-      .filter((s) => s.suggested !== undefined && s.suggested! > s.base4)
-      .sort((a, b) => (a.base4 - b.base4) || (b.credit - a.credit))
-      .map((s) => ({ code: s.code, name: s.name, toLetter: rung4.find((r) => r.val === s.suggested)!.letter, credit: s.credit }));
-
-    const suggestions = items.map((p) => `Cải thiện ${p.code} – ${p.name} lên ${p.toLetter}`);
+    const items = states.filter((s) => s.suggested !== undefined && s.suggested! > s.base4).sort((a, b) => (a.base4 - b.base4) || (b.credit - a.credit)).map((s) => ({ code: s.code, name: s.name, toLetter: (rung4.find((r) => r.val === s.suggested)!.letter), credit: s.credit }));
+    const suggestions = items.map((p) => `Cải thiện ${p.code} – ${p.name} lên ${p.toLetter} (~${letterTo10[p.toLetter]}/10)`);
     return { need: +Math.max(0, gap).toFixed(2), suggestions, items, reached: items.length === 0 };
   }, [target, semStats, baseData, courses, semCourses, semesterKey]);
 
@@ -400,7 +471,7 @@ export default function ResultsPage() {
                         <Typography.Text className="suggest-code" strong>{it.code}</Typography.Text>
                         <Tag className="suggest-tag" style={{ marginInline: 0 }}>{it.credit} tín</Tag>
                         <Typography.Text className="suggest-name">{it.name}</Typography.Text>
-                        <Tag color={tag.color} className="suggest-tag" style={{ marginInline: 0 }}>Lên {tag.text}</Tag>
+                        <Tag color={tag.color} className="suggest-tag" style={{ marginInline: 0 }}>≥ {tag.text}</Tag>
                       </div>
                     );
                   })}
@@ -415,14 +486,7 @@ export default function ResultsPage() {
             {courses.map((c) => (
               <div key={c.id} className="result-row">
                 <div className="col-cred"><Tag>{c.credit} tín chỉ</Tag></div>
-                {c.edit ? (
-                  <>
-                    <Input value={c.name} onChange={(e) => updateCourse(c.id, { name: e.target.value })} />
-                    <InputNumber min={1} max={10} value={c.credit} onChange={(v) => updateCourse(c.id, { credit: Number(v) })} />
-                  </>
-                ) : (
-                  <Typography.Text strong className="col-name">{c.name}</Typography.Text>
-                )}
+                <Typography.Text strong className="col-name">{c.name}</Typography.Text>
                 <Select
                   placeholder="Chọn điểm"
                   value={c.gradeLetter ?? ('NA' as any)}
@@ -439,8 +503,25 @@ export default function ResultsPage() {
                 />
                 <div className="col-actions">
                   <Space>
-                    <Button size="small" icon={<EditOutlined />} aria-label="Chỉnh sửa" onClick={() => updateCourse(c.id, { edit: !c.edit })} />
-                    <Button size="small" danger icon={<DeleteOutlined />} aria-label="Xóa" onClick={() => removeCourse(c.id)} />
+                    <Button
+                      size="small"
+                      icon={<EditOutlined />}
+                      aria-label="Chỉnh sửa"
+                      onClick={() => {
+                        setEditingId(c.id);
+                        editForm.setFieldsValue({ name: (c as any).name, credit: (c as any).credit });
+                        setIsEditOpen(true);
+                      }}
+                    />
+                    <Popconfirm
+                      title="Xóa môn học"
+                      description={`Bạn có chắc muốn xóa "${(c as any).name}"?`}
+                      okText="Xóa"
+                      cancelText="Hủy"
+                      onConfirm={() => removeCourse(c.id)}
+                    >
+                      <Button size="small" danger icon={<DeleteOutlined />} aria-label="Xóa" />
+                    </Popconfirm>
                   </Space>
                 </div>
               </div>
@@ -501,6 +582,42 @@ export default function ResultsPage() {
           cancelText="Hủy"
         >
           <Form form={addForm} layout="vertical">
+            <Form.Item label="Tên môn học" name="name" rules={[{ required: true, message: 'Nhập tên môn học' }]}>
+              <Input placeholder="Ví dụ: Toán cao cấp 1" />
+            </Form.Item>
+            <Form.Item label="Số tín chỉ" name="credit" rules={[{ required: true, message: 'Nhập số tín chỉ' }]}>
+              <InputNumber min={1} max={10} style={{ width: '100%' }} />
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        <Modal
+          title="Chỉnh sửa môn học"
+          open={isEditOpen}
+          onCancel={() => { setIsEditOpen(false); setEditingId(null); editForm.resetFields(); }}
+          onOk={async () => {
+            try {
+              const values = await editForm.validateFields();
+              if (editingId) {
+                // update local state
+                const current = courses.find((x) => x.id === editingId);
+                if (current) {
+                  updateCourse(editingId, { name: values.name, credit: values.credit });
+                  // persist to curriculum database (the update applies by course code across semesters)
+                  updateCourseInCurriculum(specialization, { code: (current as any).code, name: values.name, credit: values.credit })
+                    .then(() => { try { window.dispatchEvent(new Event('progress-override-changed')); } catch {} })
+                    .catch(() => {/* ignore network errors for now */});
+                }
+              }
+              setIsEditOpen(false);
+              setEditingId(null);
+              editForm.resetFields();
+            } catch { /* ignore */ }
+          }}
+          okText="Lưu"
+          cancelText="Hủy"
+        >
+          <Form form={editForm} layout="vertical">
             <Form.Item label="Tên môn học" name="name" rules={[{ required: true, message: 'Nhập tên môn học' }]}>
               <Input placeholder="Ví dụ: Toán cao cấp 1" />
             </Form.Item>
