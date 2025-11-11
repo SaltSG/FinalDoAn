@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# Force bash scripts to use LF
+*.sh text eol=lf
+
+# Keep Windows batch files with CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+
