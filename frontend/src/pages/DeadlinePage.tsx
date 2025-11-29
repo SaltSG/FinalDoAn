@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { 
   Button, 
@@ -63,13 +63,22 @@ export default function DeadlinePage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'incomplete' | 'completed' | 'upcoming' | 'ongoing' | 'overdue'>('all');
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
+  const hasOpenedFromUrl = useRef<string | null>(null); // Track which deadline ID we've already opened from URL
 
   // Sync initial filter from query string if provided (e.g., ?status=ongoing)
+  // If there's an ID in URL, temporarily set filter to 'all' to ensure deadline is loaded
   useEffect(() => {
     const qs = new URLSearchParams(location.search);
+    const deadlineId = qs.get('id');
     const st = (qs.get('status') || '').toLowerCase();
     const allowed = new Set(['all','incomplete','completed','upcoming','ongoing','overdue']);
-    if (st && allowed.has(st) && st !== statusFilter) setStatusFilter(st as any);
+    
+    // If there's an ID, temporarily use 'all' filter to ensure deadline is loaded
+    if (deadlineId && statusFilter !== 'all') {
+      setStatusFilter('all');
+    } else if (st && allowed.has(st) && st !== statusFilter) {
+      setStatusFilter(st as any);
+    }
   }, [location.search]);
 
   // Load from API (server-side filter & createdAt desc)
@@ -79,20 +88,77 @@ export default function DeadlinePage() {
     const statusParam = statusFilter === 'all' ? undefined : statusFilter;
     apiFetchDeadlines(u.id, statusParam as any)
       .then((rs) => {
-        const mapped = rs.map((d) => ({
-          id: d._id,
-          title: d.title,
-          startAt: d.startAt ?? null,
-          endAt: d.endAt ?? null,
-          note: d.note || '',
-          createdAt: d.createdAt,
-          status: d.status,
-        } as Deadline));
+        const mapped = rs
+          // Chỉ hiển thị deadline thường, ẩn hoàn toàn các lịch thi
+          .filter((d) => !d.isExam)
+          .map((d) => ({
+            id: d._id,
+            title: d.title,
+            startAt: d.startAt ?? null,
+            endAt: d.endAt ?? null,
+            note: d.note || '',
+            createdAt: d.createdAt,
+            status: d.status,
+          } as Deadline));
         setDeadlines(mapped);
         setPage(1);
       })
       .catch(() => {});
   }, [statusFilter]);
+
+  // Auto-open deadline from URL query param (e.g., ?id=xxx)
+  useEffect(() => {
+    const qs = new URLSearchParams(location.search);
+    const deadlineId = qs.get('id');
+    
+    // Only open if:
+    // 1. There's an ID in URL
+    // 2. Deadlines are loaded
+    // 3. Modal is not currently visible
+    // 4. We haven't already opened this ID from URL
+    if (deadlineId && deadlines.length > 0 && !isModalVisible && hasOpenedFromUrl.current !== deadlineId) {
+      const deadline = deadlines.find(d => d.id === deadlineId);
+      if (deadline) {
+        hasOpenedFromUrl.current = deadlineId;
+        setEditingDeadline(deadline);
+        form.setFieldsValue({
+          title: deadline.title,
+          startDate: deadline.startAt ? dayjs(deadline.startAt) : undefined,
+          startTime: deadline.startAt ? dayjs(deadline.startAt) : undefined,
+          endDate: deadline.endAt ? dayjs(deadline.endAt) : undefined,
+          endTime: deadline.endAt ? dayjs(deadline.endAt) : undefined,
+          note: deadline.note
+        });
+        setIsModalVisible(true);
+        // Remove id from URL to avoid reopening on refresh
+        const newSearch = new URLSearchParams(location.search);
+        newSearch.delete('id');
+        window.history.replaceState({}, '', `${location.pathname}${newSearch.toString() ? '?' + newSearch.toString() : ''}`);
+      }
+    }
+    
+    // Reset the ref if there's no ID in URL anymore
+    if (!deadlineId && hasOpenedFromUrl.current) {
+      hasOpenedFromUrl.current = null;
+    }
+  }, [location.search, deadlines, isModalVisible, form]);
+
+  // Sync form values when modal state changes
+  useEffect(() => {
+    if (!isModalVisible) return;
+    if (editingDeadline) {
+      form.setFieldsValue({
+        title: editingDeadline.title,
+        startDate: editingDeadline.startAt ? dayjs(editingDeadline.startAt) : undefined,
+        startTime: editingDeadline.startAt ? dayjs(editingDeadline.startAt) : undefined,
+        endDate: editingDeadline.endAt ? dayjs(editingDeadline.endAt) : undefined,
+        endTime: editingDeadline.endAt ? dayjs(editingDeadline.endAt) : undefined,
+        note: editingDeadline.note
+      });
+    } else {
+      form.resetFields();
+    }
+  }, [isModalVisible, editingDeadline, form]);
 
   const getDeadlineStatus = (startAt: string | null, endAt: string | null): Deadline['status'] => {
     const now = dayjs();
@@ -176,15 +242,15 @@ export default function DeadlinePage() {
 
   const handleEdit = (deadline: Deadline) => {
     setEditingDeadline(deadline);
+    setIsModalVisible(true);
     form.setFieldsValue({
       title: deadline.title,
       startDate: deadline.startAt ? dayjs(deadline.startAt) : undefined,
       startTime: deadline.startAt ? dayjs(deadline.startAt) : undefined,
       endDate: deadline.endAt ? dayjs(deadline.endAt) : undefined,
       endTime: deadline.endAt ? dayjs(deadline.endAt) : undefined,
-      note: deadline.note
+      note: deadline.note,
     });
-    setIsModalVisible(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -196,18 +262,36 @@ export default function DeadlinePage() {
 
   const handleAddNew = () => {
     setEditingDeadline(null);
-    form.resetFields();
     setIsModalVisible(true);
+    form.setFieldsValue({
+      title: '',
+      startDate: undefined,
+      startTime: undefined,
+      endDate: undefined,
+      endTime: undefined,
+      note: '',
+    });
   };
 
-  const handleCompletionChange = async (id: string, value: 'completed' | 'incomplete' | 'ongoing') => {
+  const handleCompletionChange = async (
+    id: string,
+    value: 'completed' | 'incomplete' | 'ongoing' | 'upcoming'
+  ) => {
     const u = getAuthUser();
     if (!u?.id) return;
-    const cur = deadlines.find(d => d.id === id);
+    const cur = deadlines.find((d) => d.id === id);
     if (!cur) return;
+
+    // Map select value to backend status:
+    // - 'completed'  -> status: 'completed'
+    // - 'ongoing'    -> status: 'ongoing'
+    // - 'upcoming' or 'incomplete' -> omit status to let server compute from dates
+    const nextStatus =
+      value === 'completed' ? 'completed' : value === 'ongoing' ? 'ongoing' : undefined;
+
     const updated = await apiUpdateDeadline(u.id, id, {
-      status: value === 'completed' ? 'completed' : (value === 'ongoing' ? 'ongoing' : undefined),
-      // if 'incomplete', omit status to let server compute from times
+      status: nextStatus,
+      // if 'upcoming' or 'incomplete', omit status to let server compute from times
       startAt: cur.startAt,
       endAt: cur.endAt,
     }).catch(() => null);
@@ -302,18 +386,65 @@ export default function DeadlinePage() {
       width: 180,
       align: 'center' as const,
       render: (_: any, record: Deadline) => {
-        const effective = record.status === 'completed' ? 'completed' : getDeadlineStatus(record.startAt, record.endAt);
-        const selectValue = effective === 'completed' ? 'completed' : (effective === 'ongoing' ? 'ongoing' : 'incomplete');
+        // Use status from backend (already computed correctly)
+        // Map backend status to select value
+        let selectValue: 'completed' | 'incomplete' | 'ongoing' | 'upcoming';
+        switch (record.status) {
+          case 'completed':
+            selectValue = 'completed';
+            break;
+          case 'ongoing':
+            selectValue = 'ongoing';
+            break;
+          case 'upcoming':
+            selectValue = 'upcoming';
+            break;
+          default:
+            // 'overdue' -> show as 'incomplete' (Không hoàn thành)
+            selectValue = 'incomplete';
+        }
+
         return (
           <Select
             className="deadline-status-select"
             value={selectValue}
             style={{ width: 160, display: 'block', margin: '0 auto' }}
-            onChange={(v: 'completed' | 'incomplete' | 'ongoing') => handleCompletionChange(record.id, v)}
+            onChange={(v: 'completed' | 'incomplete' | 'ongoing' | 'upcoming') =>
+              handleCompletionChange(record.id, v)
+            }
             options={[
-              { value: 'ongoing', label: (<span className="status-pill status-blue">Đang diễn ra</span>) },
-              { value: 'completed', label: (<span className="status-pill status-green">Đã hoàn thành</span>) },
-              { value: 'incomplete', label: (<span className="status-pill status-yellow">Không hoàn thành</span>) }
+              {
+                value: 'upcoming',
+                label: (
+                  <span className="status-pill status-blue">
+                    Sắp tới
+                  </span>
+                ),
+              },
+              {
+                value: 'ongoing',
+                label: (
+                  <span className="status-pill status-blue">
+                    Đang diễn ra
+                  </span>
+                ),
+              },
+              {
+                value: 'completed',
+                label: (
+                  <span className="status-pill status-green">
+                    Đã hoàn thành
+                  </span>
+                ),
+              },
+              {
+                value: 'incomplete',
+                label: (
+                  <span className="status-pill status-yellow">
+                    Không hoàn thành
+                  </span>
+                ),
+              },
             ]}
           />
         );
@@ -500,6 +631,10 @@ export default function DeadlinePage() {
           setIsModalVisible(false);
           setEditingDeadline(null);
           form.resetFields();
+          // Reset the URL tracking when modal is closed manually
+          if (hasOpenedFromUrl.current) {
+            hasOpenedFromUrl.current = null;
+          }
         }}
         footer={null}
         width={650}
@@ -559,6 +694,10 @@ export default function DeadlinePage() {
                   setIsModalVisible(false);
                   setEditingDeadline(null);
                   form.resetFields();
+                  // Reset the URL tracking when modal is closed manually
+                  if (hasOpenedFromUrl.current) {
+                    hasOpenedFromUrl.current = null;
+                  }
                 }}
                 className="deadline-modal-cancel-button"
               >

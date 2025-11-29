@@ -4,9 +4,27 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
 import { OAuth2Client } from 'google-auth-library';
 
-function signJwt(user: { id: string; name?: string; email?: string }) {
+type JwtUser = {
+  id: string;
+  name?: string;
+  email?: string;
+  role?: 'user' | 'admin';
+  status?: 'active' | 'locked';
+};
+
+function signJwt(user: JwtUser) {
   const secret = process.env.JWT_SECRET || 'dev_secret_change_me';
-  return jwt.sign({ id: user.id, name: user.name, email: user.email }, secret, { expiresIn: '7d' });
+  return jwt.sign(
+    {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+    },
+    secret,
+    { expiresIn: '7d' }
+  );
 }
 
 export const register: RequestHandler = async (req, res) => {
@@ -15,9 +33,26 @@ export const register: RequestHandler = async (req, res) => {
   const existing = await User.findOne({ email });
   if (existing) return res.status(409).json({ message: 'Email already exists' });
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await User.create({ email, name: name ?? email.split('@')[0], passwordHash, provider: 'local' });
-  const userDto = { id: user.id, email: user.email, name: user.name, provider: user.provider, picture: user.picture };
-  const token = signJwt(userDto);
+  const user = await User.create({
+    email,
+    name: name ?? email.split('@')[0],
+    passwordHash,
+    provider: 'local',
+    lastLoginAt: new Date(),
+  });
+  const jwtUser: JwtUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    status: user.status,
+  };
+  const userDto = {
+    ...jwtUser,
+    provider: user.provider,
+    picture: user.picture,
+  };
+  const token = signJwt(jwtUser);
   return res.json({ user: userDto, token });
 };
 
@@ -25,10 +60,24 @@ export const login: RequestHandler = async (req, res) => {
   const { email, password } = req.body ?? {};
   const user = await User.findOne({ email });
   if (!user || !user.passwordHash) return res.status(401).json({ message: 'Invalid credentials' });
+  if (user.status === 'locked') return res.status(403).json({ message: 'account_locked' });
   const ok = await (await import('bcryptjs')).compare(password, user.passwordHash);
   if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
-  const userDto = { id: user.id, email: user.email, name: user.name, provider: user.provider, picture: user.picture };
-  const token = signJwt(userDto);
+  user.lastLoginAt = new Date();
+  user.save().catch(() => {});
+  const jwtUser: JwtUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    status: user.status,
+  };
+  const userDto = {
+    ...jwtUser,
+    provider: user.provider,
+    picture: user.picture,
+  };
+  const token = signJwt(jwtUser);
   return res.json({ user: userDto, token });
 };
 
@@ -62,10 +111,28 @@ export const googleSignIn: RequestHandler = async (req, res) => {
 
     let user = await User.findOne({ email });
     if (!user) {
-      user = await User.create({ email, name, provider: 'google', picture });
+      user = await User.create({ email, name, provider: 'google', picture, lastLoginAt: new Date() });
     }
-    const userDto = { id: user.id, email: user.email, name: user.name, provider: user.provider, picture: user.picture };
-    const token = signJwt(userDto);
+    if (user.status === 'locked') return res.status(403).json({ message: 'account_locked' });
+    if (!user.lastLoginAt) {
+      user.lastLoginAt = new Date();
+    } else {
+      user.lastLoginAt = new Date();
+    }
+    user.save().catch(() => {});
+    const jwtUser: JwtUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      status: user.status,
+    };
+    const userDto = {
+      ...jwtUser,
+      provider: user.provider,
+      picture: user.picture,
+    };
+    const token = signJwt(jwtUser);
     return res.json({ user: userDto, token });
   } catch (e) {
     return res.status(401).json({ message: 'invalid_credential' });

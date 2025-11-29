@@ -12,6 +12,9 @@ import { resultsRouter } from './routes/results';
 import { curriculumRouter } from './routes/curriculum';
 import { deadlinesRouter } from './routes/deadlines';
 import { chatRouter } from './routes/chat';
+import { chatbotRouter } from './routes/chatbot';
+import { eventsRouter } from './routes/events';
+import { adminRouter } from './routes/admin';
 import { initializeSocket } from './realtime/socket';
 
 const app = express();
@@ -50,6 +53,9 @@ app.use('/api/results', resultsRouter);
 app.use('/api/curriculum', curriculumRouter);
 app.use('/api/deadlines', deadlinesRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/events', eventsRouter);
+app.use('/api/chatbot', chatbotRouter);
+app.use('/api/admin', adminRouter);
 
 const PORT = Number(process.env.PORT || 5000);
 const server = http.createServer(app);

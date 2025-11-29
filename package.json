@@ -11,17 +11,17 @@
     "npm": ">=9"
   },
   "scripts": {
-    "dev": "npm-run-all --parallel dev:*",
+    "dev": "npm-run-all --parallel dev:client dev:server",
     "dev:client": "npm --workspace frontend run dev",
     "dev:server": "npm --workspace backend run dev",
-    "build": "npm-run-all build:*",
+    "build": "npm-run-all build:client build:server",
     "build:client": "npm --workspace frontend run build",
     "build:server": "npm --workspace backend run build",
-    "lint": "npm-run-all lint:*",
+    "lint": "npm-run-all lint:client lint:server",
     "lint:client": "npm --workspace frontend run lint",
     "lint:server": "npm --workspace backend run lint",
     "format": "prettier --write .",
-    "typecheck": "npm-run-all typecheck:* --continue-on-error",
+    "typecheck": "npm-run-all typecheck:client typecheck:server --continue-on-error",
     "typecheck:client": "npm --workspace frontend run typecheck || exit 0",
     "typecheck:server": "npm --workspace backend run typecheck || exit 0"
   },

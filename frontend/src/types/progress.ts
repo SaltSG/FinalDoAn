@@ -11,6 +11,7 @@ export type CourseResult = {
   // Some courses (e.g., Giáo dục quốc phòng) may not count toward total credits/GPA
   countInCredits?: boolean; // default true
   countInGpa?: boolean; // default true
+  category?: string; // loại môn (bắt buộc chung, cơ sở ngành, chuyên ngành, ...)
 };
 
 export type SemesterData = {

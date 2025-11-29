@@ -6,6 +6,8 @@ export interface ICurriculumCourse {
   credit: number;
   countInGpa?: boolean;
   countInCredits?: boolean;
+  examFormat?: string; // hình thức thi (tự luận, trắc nghiệm, vấn đáp, bài tập lớn, thực hành, ...)
+  category?: string; // loại môn (bắt buộc chung, cơ sở ngành, chuyên ngành, thực tập, ...)
 }
 
 export interface ICurriculumSemester {
@@ -34,6 +36,8 @@ const CurriculumSchema = new Schema<ICurriculum>({
           credit: { type: Number, required: true },
           countInGpa: { type: Boolean, default: true },
           countInCredits: { type: Boolean, default: true },
+          examFormat: { type: String, default: null },
+          category: { type: String, default: null },
         },
       ],
     },

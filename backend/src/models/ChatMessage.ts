@@ -31,6 +31,10 @@ const chatMessageSchema = new Schema<IChatMessage>({
   },
 }, { timestamps: { createdAt: true, updatedAt: false } });
 
+// Indexes to speed up attachment filters
+chatMessageSchema.index({ room: 1, 'attachment.url': 1, createdAt: -1 });
+chatMessageSchema.index({ room: 1, 'attachment.mimeType': 1, createdAt: -1 });
+
 export const ChatMessage = mongoose.model<IChatMessage>('ChatMessage', chatMessageSchema);
 
 

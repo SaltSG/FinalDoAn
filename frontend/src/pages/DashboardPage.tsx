@@ -1,13 +1,16 @@
-import { Card, Empty, Space, Tag, Typography, Button, Row, Col, Progress, Modal } from 'antd';
+import { Card, Empty, Space, Tag, Typography, Button, Row, Col, Progress, Modal, Select, message } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ProgressData } from '../types/progress';
-import { fourFrom10 } from '../lib/grading';
+import type { ProgressData, CourseResult } from '../types/progress';
+import { fourFrom10, letterFrom10, letterTo10, type Letter } from '../lib/grading';
 import { getAuthUser } from '../services/auth';
-import { fetchResults } from '../services/results';
+import { fetchResults, saveResults } from '../services/results';
 import { fetchDeadlines as apiFetchDeadlines } from '../services/deadlines';
 import { BellOutlined, RightOutlined } from '@ant-design/icons';
 import { fetchCurriculum } from '../services/curriculum';
+
+const GRADE_OPTIONS = ['A+','A','B+','B','C+','C','D+','D','F'];
+const gradeToLetter = letterFrom10;
 
 type DashboardPageProps = {
   logoSrc?: string;
@@ -151,6 +154,9 @@ export default function DashboardPage({ logoSrc }: DashboardPageProps) {
   }, [data]);
 
   const [failedOpen, setFailedOpen] = useState(false);
+  const [currentSemModalOpen, setCurrentSemModalOpen] = useState(false);
+  // State local cho modal để cập nhật ngay lập tức
+  const [modalCourses, setModalCourses] = useState<Array<CourseResult & { gradeLetter?: Letter }>>([]);
 
   const [deadlineStats, setDeadlineStats] = useState<{ total: number; completed: number; ongoing: number } | undefined>(undefined);
   useEffect(() => {
@@ -194,12 +200,125 @@ export default function DashboardPage({ logoSrc }: DashboardPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deadlineStats?.total, deadlineStats?.completed]);
 
+  // Kỳ học hiện tại & mục tiêu (lấy từ localStorage, do trang Tiến trình / Kết quả thiết lập)
+  const [currentStudySem, setCurrentStudySem] = useState<string | undefined>(() => {
+    try {
+      return localStorage.getItem('currentStudySem') || undefined;
+    } catch {
+      return undefined;
+    }
+  });
+  const [targetGoal, setTargetGoal] = useState<string | undefined>(() => {
+    try {
+      return localStorage.getItem('targetGoal') || undefined;
+    } catch {
+      return undefined;
+    }
+  });
+
+  useEffect(() => {
+    const sync = () => {
+      try {
+        setCurrentStudySem(localStorage.getItem('currentStudySem') || undefined);
+        setTargetGoal(localStorage.getItem('targetGoal') || undefined);
+      } catch {
+        setCurrentStudySem(undefined);
+        setTargetGoal(undefined);
+      }
+    };
+    window.addEventListener('storage', sync);
+    window.addEventListener('current-study-sem-changed', sync as any);
+    window.addEventListener('target-goal-changed', sync as any);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('current-study-sem-changed', sync as any);
+      window.removeEventListener('target-goal-changed', sync as any);
+    };
+  }, []);
+
+  const targetLabel = useMemo(() => {
+    if (!targetGoal) return undefined as { label: string; threshold: number } | undefined;
+    if (targetGoal === 'KHA') return { label: 'Bằng khá', threshold: 2.5 };
+    if (targetGoal === 'GIOI') return { label: 'Bằng giỏi', threshold: 3.2 };
+    if (targetGoal === 'XUATSAC') return { label: 'Bằng xuất sắc', threshold: 3.6 };
+    return undefined;
+  }, [targetGoal]);
+
+  // Lấy danh sách môn học của kỳ học hiện tại
+  const currentSemCourses = useMemo(() => {
+    if (!currentStudySem || !data) return [];
+    const sem = data.semesters.find((s) => s.semester === currentStudySem);
+    if (!sem) return [];
+    return sem.courses.map((c) => {
+      const grade = c.grade;
+      const gradeLetter = grade !== undefined ? gradeToLetter(grade) : undefined;
+      return { ...c, gradeLetter };
+    });
+  }, [currentStudySem, data]);
+
+  // Cập nhật điểm cho môn học trong modal (cập nhật ngay lập tức)
+  const updateCourseGrade = (code: string, gradeLetter: Letter | undefined) => {
+    // Cập nhật modalCourses ngay lập tức để UI phản hồi nhanh
+    setModalCourses((prev) =>
+      prev.map((c) => (c.code === code ? { ...c, gradeLetter } : c))
+    );
+  };
+
+  // Hàm xử lý khi ấn nút Lưu
+  const handleSaveGrades = async () => {
+    if (!currentStudySem) return;
+    
+    // Chuyển modalCourses sang override format
+    const newOverride = override ? { ...override } : {};
+    if (!newOverride[currentStudySem]) newOverride[currentStudySem] = {};
+    
+    for (const c of modalCourses) {
+      const grade = c.gradeLetter ? letterTo10[c.gradeLetter] : undefined;
+      if (grade !== undefined) {
+        newOverride[currentStudySem][c.code] = { ...newOverride[currentStudySem][c.code], grade };
+      } else {
+        // Xóa điểm nếu chọn "Chưa có điểm"
+        const existing = newOverride[currentStudySem][c.code];
+        if (existing) {
+          const { grade: _, ...rest } = existing;
+          if (Object.keys(rest).length > 0) {
+            newOverride[currentStudySem][c.code] = rest;
+          } else {
+            delete newOverride[currentStudySem][c.code];
+          }
+        }
+      }
+    }
+    
+    // Cập nhật override
+    setOverride(newOverride);
+    try {
+      localStorage.setItem('progress.override', JSON.stringify({ data: newOverride }));
+      window.dispatchEvent(new Event('progress-override-changed'));
+    } catch {}
+    
+    // Sync với server
+    const u = getAuthUser();
+    if (u?.id) {
+      try {
+        await saveResults(u.id, newOverride);
+        message.success('Đã lưu thành công');
+        setCurrentSemModalOpen(false);
+      } catch (err: any) {
+        message.error('Lưu thất bại: ' + (err?.message || 'Lỗi không xác định'));
+      }
+    } else {
+      message.success('Đã lưu thành công');
+      setCurrentSemModalOpen(false);
+    }
+  };
+
   return (
     <main className="container">
       <section className="hero">
         <div className="hero-brand">
           <div>
-            <h2 className="brand">Tổng quan</h2>
+            <Typography.Title level={4} style={{ margin: 0, color: '#2d3436' }}>Tổng quan</Typography.Title>
           </div>
         </div>
       </section>
@@ -207,48 +326,100 @@ export default function DashboardPage({ logoSrc }: DashboardPageProps) {
       {/* Bố cục 2 cột: trái (GPA lớn), phải (2 thẻ xếp dọc) */}
       <Row gutter={10}>
         <Col xs={24} lg={16}>
-          <Card
-            style={{ marginBottom: 10 }}
-            title={<Typography.Text strong>GPA các học kỳ (thang 4)</Typography.Text>}
-            extra={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Typography.Text style={{ fontSize: 12, color: '#6b7280' }}>Tổng GPA tích lũy:</Typography.Text>
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: '2px 10px',
-                    borderRadius: 999,
-                    background: 'linear-gradient(90deg,#fde68a,#f59e0b)',
-                    color: '#111827',
-                    fontWeight: 700,
-                    fontSize: 18,
-                    boxShadow: '0 1px 0 rgba(0,0,0,0.06)'
-                  }}
-                >
-                  {overallCumGpa4 !== undefined ? (overallCumGpa4 as number).toFixed(2) : '-'}
-                </span>
-              </div>
-            }
-          >
-            {!data ? (
-              <Empty description="Chưa có dữ liệu" />
-            ) : (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, perSemesterStats.length)}, 1fr)`, alignItems: 'end', gap: 16, minHeight: 240 }}>
-                  {perSemesterStats.map((s) => (
-                    <div key={`gpa-all-${s.sem}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                      <Typography.Text style={{ fontSize: 12 }}>{s.gpa4 !== undefined ? s.gpa4.toFixed(2) : '-'}</Typography.Text>
-                      <div style={{ width: 28, height: 180, background: '#eef2ff', borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'flex-end' }}>
-                        <div style={{ width: '100%', height: `${mounted ? Math.max(6, Math.round(((s.gpa4 ?? 0) / 4) * 100)) : 0}%`, background: 'var(--color-secondary)', transition: 'height 600ms ease', opacity: s.gpa4 === undefined ? 0.2 : 1 }} />
-                      </div>
-                      <Typography.Text style={{ fontSize: 12, color: '#6b7280' }}>{s.sem}</Typography.Text>
-                    </div>
-                  ))}
+          <Space direction="vertical" size={10} style={{ width: '100%' }}>
+            <Card
+              style={{ marginBottom: 0 }}
+              title={<Typography.Text strong>GPA các học kỳ (thang 4)</Typography.Text>}
+              extra={
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Typography.Text style={{ fontSize: 12, color: '#6b7280' }}>Tổng GPA tích lũy:</Typography.Text>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '2px 10px',
+                      borderRadius: 999,
+                      background: 'linear-gradient(90deg,#fde68a,#f59e0b)',
+                      color: '#111827',
+                      fontWeight: 700,
+                      fontSize: 18,
+                      boxShadow: '0 1px 0 rgba(0,0,0,0.06)'
+                    }}
+                  >
+                    {overallCumGpa4 !== undefined ? (overallCumGpa4 as number).toFixed(2) : '-'}
+                  </span>
                 </div>
-              </div>
-            )}
-          </Card>
+              }
+            >
+              {!data ? (
+                <Empty description="Chưa có dữ liệu" />
+              ) : (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, perSemesterStats.length)}, 1fr)`, alignItems: 'end', gap: 16, minHeight: 240 }}>
+                    {perSemesterStats.map((s) => (
+                      <div key={`gpa-all-${s.sem}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                        <Typography.Text style={{ fontSize: 12 }}>{s.gpa4 !== undefined ? s.gpa4.toFixed(2) : '-'}</Typography.Text>
+                        <div style={{ width: 28, height: 180, background: '#eef2ff', borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'flex-end' }}>
+                          <div style={{ width: '100%', height: `${mounted ? Math.max(6, Math.round(((s.gpa4 ?? 0) / 4) * 100)) : 0}%`, background: 'var(--color-secondary)', transition: 'height 600ms ease', opacity: s.gpa4 === undefined ? 0.2 : 1 }} />
+                        </div>
+                        <Typography.Text style={{ fontSize: 12, color: '#6b7280' }}>{s.sem}</Typography.Text>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            <Row gutter={10} style={{ alignItems: 'stretch' }}>
+              {currentStudySem && (
+                <Col xs={24} sm={8} lg={6} style={{ display: 'flex' }}>
+                  <Card 
+                    bodyStyle={{ padding: 10, cursor: 'pointer' }} 
+                    style={{ width: '100%' }}
+                    onClick={() => {
+                      // Copy currentSemCourses vào modalCourses khi mở modal
+                      setModalCourses(currentSemCourses.map(c => ({ ...c })));
+                      setCurrentSemModalOpen(true);
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', textAlign: 'center' }}>
+                      <Typography.Text style={{ fontSize: 12, color: '#6b7280' }}>
+                        Kỳ học hiện tại
+                      </Typography.Text>
+                      <Tag color="blue" style={{ borderRadius: 999, padding: '4px 16px', fontWeight: 700, fontSize: 14 }}>
+                        {currentStudySem}
+                      </Tag>
+                    </div>
+                  </Card>
+                </Col>
+              )}
+
+              {targetLabel && (
+                <Col xs={24} sm={currentStudySem ? 16 : 24} lg={currentStudySem ? 18 : 24} style={{ display: 'flex' }}>
+                  <Card bodyStyle={{ padding: 10 }} style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <Typography.Text style={{ color: '#92400e', fontWeight: 600 }}>
+                          Mục tiêu bằng tốt nghiệp
+                        </Typography.Text>
+                        <div style={{ fontSize: 12, color: '#6b7280' }}>
+                          {targetLabel.label} — cần GPA tích lũy ≥ {targetLabel.threshold.toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <Typography.Text strong style={{ fontSize: 16 }}>
+                          {overallCumGpa4 !== undefined ? (overallCumGpa4 as number).toFixed(2) : '-'}
+                        </Typography.Text>
+                        <div style={{ fontSize: 12, color: (overallCumGpa4 ?? 0) >= targetLabel.threshold ? '#16a34a' : '#b91c1c', fontWeight: 600 }}>
+                          {(overallCumGpa4 ?? 0) >= targetLabel.threshold ? 'ĐÃ ĐẠT' : 'CHƯA ĐẠT'}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </Col>
+              )}
+            </Row>
+          </Space>
         </Col>
         <Col xs={24} lg={8}>
           <Space direction="vertical" size={10} style={{ width: '100%' }}>
@@ -301,6 +472,76 @@ export default function DashboardPage({ logoSrc }: DashboardPageProps) {
                       </div>
                     ))}
                   </Space>
+                </div>
+              )}
+            </Modal>
+
+            <Modal
+              open={currentSemModalOpen}
+              onCancel={() => setCurrentSemModalOpen(false)}
+              footer={
+                <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
+                  <Button onClick={() => setCurrentSemModalOpen(false)}>Hủy</Button>
+                  <Button type="primary" onClick={handleSaveGrades}>Lưu</Button>
+                </Space>
+              }
+              title={<Typography.Text strong>Nhập điểm — {currentStudySem}</Typography.Text>}
+              width={520}
+            >
+              {modalCourses.length === 0 ? (
+                <Empty description="Chưa có môn học" />
+              ) : (
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(2, 1fr)', 
+                  gap: 8,
+                  padding: '4px 0'
+                }}>
+                  {modalCourses.map((c) => (
+                    <div 
+                      key={c.code} 
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        gap: 4,
+                        padding: '8px',
+                        background: '#fafafa',
+                        borderRadius: 6,
+                        border: '1px solid #f0f0f0'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                        <Typography.Text 
+                          strong 
+                          ellipsis={{ tooltip: `${c.code} - ${c.name}` }}
+                          style={{ fontSize: 12, flex: 1, minWidth: 0 }}
+                        >
+                          {c.code}
+                        </Typography.Text>
+                        <Tag style={{ margin: 0, fontSize: 11 }}>{c.credit} TC</Tag>
+                      </div>
+                      <Typography.Text 
+                        ellipsis={{ tooltip: c.name }}
+                        style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.3 }}
+                      >
+                        {c.name}
+                      </Typography.Text>
+                      <Select
+                        size="small"
+                        placeholder="Điểm"
+                        value={c.gradeLetter ?? ('NA' as any)}
+                        onChange={(v) => {
+                          updateCourseGrade(c.code, v === 'NA' ? undefined : (v as Letter));
+                        }}
+                        options={[
+                          { value: 'NA', label: <span style={{ fontSize: 11 }}>Chưa có điểm</span> },
+                          ...GRADE_OPTIONS.map((g) => ({ value: g, label: g }))
+                        ]}
+                        style={{ width: 110, marginTop: 2, fontSize: 12 }}
+                        dropdownStyle={{ fontSize: 12 }}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
             </Modal>

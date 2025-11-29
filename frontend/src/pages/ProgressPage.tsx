@@ -1,7 +1,7 @@
 import { Card, Empty, Select, Space, Tag, Typography, Button, Modal, Tooltip } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { ExclamationCircleOutlined, ExclamationCircleFilled } from '@ant-design/icons';
-import type { ProgressData, SemesterData, Specialization, SemesterKey } from '../types/progress';
+import type { ProgressData, SemesterData, Specialization, SemesterKey, CourseResult } from '../types/progress';
 import { fourFrom10, letterFrom10 } from '../lib/grading';
 import { getAuthUser } from '../services/auth';
 import { fetchResults, fetchResultsMeta, saveSpecialization } from '../services/results';
@@ -17,12 +17,122 @@ const DEFAULT_SEMESTERS: { value: string; label: string }[] = Array.from({ lengt
   label: `Học kỳ ${i + 1}`
 }));
 
+const CATEGORY_META = [
+  { value: 'common', label: 'Bắt buộc chung', color: '#60a5fa' },
+  { value: 'group-common', label: 'Bắt buộc chung nhóm ngành', color: '#38bdf8' },
+  { value: 'foundation', label: 'Cơ sở ngành', color: '#ef4444' },
+  { value: 'major', label: 'Bắt buộc ngành', color: '#f97316' },
+  { value: 'specialization', label: 'Chuyên ngành', color: '#a855f7' },
+  { value: 'professional', label: 'Giáo dục chuyên nghiệp', color: '#6366f1' },
+  { value: 'internship', label: 'Thực tập', color: '#1d4ed8' },
+  { value: 'thesis', label: 'Luận văn tốt nghiệp', color: '#16a34a' },
+  { value: 'elective', label: 'Tự chọn', color: '#9ca3af' },
+];
+
+const DEFAULT_CATEGORY = { value: 'none', label: 'Chưa phân loại', color: '#e5e7eb' };
+
+function inferCategoryFromCourse(course: CourseResult): string | undefined {
+  const code = (course.code || '').toUpperCase();
+  const name = (course.name || '').toLowerCase();
+
+  // Thực tập / thực tập tốt nghiệp
+  if (name.includes('thực tập')) return 'internship';
+
+  // Đồ án / luận văn tốt nghiệp
+  if (name.includes('đồ án tốt nghiệp') || name.includes('luận văn') || code.startsWith('CDT')) {
+    return 'thesis';
+  }
+
+  // Bắt buộc chung: chính trị, GDQP, GDTC, tiếng Anh, kỹ năng mềm
+  if (
+    code.startsWith('BAS11') ||
+    code.startsWith('SKD') ||
+    name.includes('giáo dục') ||
+    name.includes('kỹ năng') ||
+    name.includes('mác') ||
+    name.includes('lênin') ||
+    name.includes('đảng cộng sản') ||
+    name.includes('hồ chí minh') ||
+    name.includes('tiếng anh')
+  ) {
+    return 'common';
+  }
+
+  // Cơ sở ngành: toán, xác suất, tin học cơ sở, CTDL, kiến trúc máy tính...
+  if (
+    code.startsWith('BAS12') ||
+    code.startsWith('INT11') ||
+    code.startsWith('INT13') ||
+    name.includes('toán') ||
+    name.includes('xác suất') ||
+    name.includes('thống kê') ||
+    name.includes('tin học cơ sở') ||
+    name.includes('cấu trúc dữ liệu') ||
+    name.includes('kiến trúc máy tính') ||
+    name.includes('cơ sở dữ liệu')
+  ) {
+    return 'foundation';
+  }
+
+  // Cơ sở ngành thiên về nghệ thuật / tạo hình
+  if (
+    name.includes('cơ sở tạo hình') ||
+    name.includes('nhập môn đa phương tiện') ||
+    name.includes('kỹ thuật nhiếp ảnh') ||
+    name.includes('mỹ thuật cơ bản') ||
+    name.includes('thiết kế hình động 1')
+  ) {
+    return 'foundation';
+  }
+
+  // Bắt buộc ngành / chuyên ngành: xử lý ảnh/video/audio, web, game, di động, AR/VR, IoT, thị giác máy tính...
+  if (
+    name.includes('xử lý ảnh') ||
+    name.includes('xử lý và truyền thông đa phương tiện') ||
+    name.includes('dựng audio') ||
+    name.includes('âm thanh') ||
+    name.includes('lập trình web') ||
+    name.includes('game') ||
+    name.includes('đa phương tiện') ||
+    name.includes('ứng dụng') ||
+    name.includes('thực tại ảo') ||
+    name.includes('iot') ||
+    name.includes('thị giác máy tính') ||
+    code.startsWith('MUL14') ||
+    code.startsWith('ELE14') ||
+    code.startsWith('INT14')
+  ) {
+    return 'major';
+  }
+
+  return undefined;
+}
+
+function getCourseCategoryMeta(course: CourseResult) {
+  const value = course.category || inferCategoryFromCourse(course);
+  if (!value) return DEFAULT_CATEGORY;
+  return CATEGORY_META.find((c) => c.value === value) ?? DEFAULT_CATEGORY;
+}
+
 export default function ProgressPage() {
   const [specialization, setSpecialization] = useState<Specialization>(() => {
     try { const s = localStorage.getItem('specialization') as Specialization; if (s === 'dev' || s === 'design') return s; } catch {}
     return 'dev';
   });
-  const [semester, setSemester] = useState<SemesterKey | undefined>('HK1');
+  const [semester, setSemester] = useState<SemesterKey | undefined>(() => {
+    try {
+      const v = localStorage.getItem('currentStudySem') as SemesterKey | null;
+      if (v && /^HK\d+$/i.test(v)) return v as SemesterKey;
+    } catch {/* ignore */}
+    return 'HK1';
+  });
+  const [currentStudySem, setCurrentStudySem] = useState<SemesterKey | undefined>(() => {
+    try {
+      const v = localStorage.getItem('currentStudySem') as SemesterKey | null;
+      if (v && /^HK\d+$/i.test(v)) return v as SemesterKey;
+    } catch {/* ignore */}
+    return undefined;
+  });
   const [showTrends, setShowTrends] = useState<boolean>(false);
   const [showSpecNote, setShowSpecNote] = useState<boolean>(false);
 
@@ -303,11 +413,33 @@ export default function ProgressPage() {
             </div>
           </div>
           <Select
-            style={{ minWidth: 220 }}
-            placeholder="Chọn học kỳ (vd: 2023-2024-HK1)"
+            style={{ width: 120 }}
+            placeholder="Chọn học kỳ"
             options={semesters}
             value={semester}
             onChange={setSemester}
+          />
+          <Select
+            allowClear
+            style={{ minWidth: 220 }}
+            placeholder="Chọn kỳ học hiện tại"
+            value={currentStudySem}
+            onChange={(v) => {
+              const val = v as SemesterKey | undefined;
+              setCurrentStudySem(val);
+              if (val) {
+                setSemester(val);
+              }
+              try {
+                if (val) {
+                  localStorage.setItem('currentStudySem', val);
+                } else {
+                  localStorage.removeItem('currentStudySem');
+                }
+                window.dispatchEvent(new Event('current-study-sem-changed'));
+              } catch {/* ignore */}
+            }}
+            options={semesters.map((s) => ({ value: s.value as SemesterKey, label: `Kỳ học hiện tại: ${s.value}` }))}
           />
         </Space>
 
@@ -462,20 +594,25 @@ export default function ProgressPage() {
               {(selected?.courses ?? []).map((c) => {
                 const letter = gradeToLetter(c.grade);
                 const muted = c.grade === undefined;
-                const stripeClass = !letter ? '' :
+                const gradeClass = !letter ? '' :
                   letter.startsWith('A') ? ' grade-a' :
                   letter.startsWith('B') ? ' grade-b' :
                   letter.startsWith('C') ? ' grade-c' :
                   letter.startsWith('D') ? ' grade-d' : ' grade-f';
+                const catMeta = getCourseCategoryMeta(c);
                 return (
-                  <Card key={c.code} className={`course-card${muted ? ' muted' : ''}${stripeClass}`}>
+                  <Card
+                    key={c.code}
+                    className={`course-card${muted ? ' muted' : ''}`}
+                    style={{ borderLeftColor: catMeta.color }}
+                  >
                     <Space direction="vertical" size={8} style={{ width: '100%' }}>
                       <Tag className="credit-pill">{c.credit} tín chỉ</Tag>
                       <Typography.Title className="course-title" level={5}>{c.name}</Typography.Title>
                       <Space size={8}>
                         <Tag>{c.code}</Tag>
                         {letter ? (
-                          <Tag className={`grade-tag${stripeClass}`}>{letter}</Tag>
+                          <Tag className={`grade-tag${gradeClass}`}>{letter}</Tag>
                         ) : (
                           <Tag>Chưa có điểm</Tag>
                         )}
@@ -484,6 +621,26 @@ export default function ProgressPage() {
                   </Card>
                 );
               })}
+            </div>
+            <div className="progress-legend-bar">
+              <div className="admin-curriculum-legend">
+                <div className="admin-curriculum-legend-item">
+                  <span
+                    className="admin-curriculum-legend-color"
+                    style={{ background: DEFAULT_CATEGORY.color }}
+                  />
+                  <span>{DEFAULT_CATEGORY.label}</span>
+                </div>
+                {CATEGORY_META.map((opt) => (
+                  <div key={opt.value} className="admin-curriculum-legend-item">
+                    <span
+                      className="admin-curriculum-legend-color"
+                      style={{ background: opt.color }}
+                    />
+                    <span>{opt.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

@@ -40,8 +40,20 @@ export default function ResultsPage() {
   });
   const [baseData, setBaseData] = useState<ProgressData | undefined>(undefined);
   const [semesterKey, setSemesterKey] = useState<string>('HK1');
-  const [target, setTarget] = useState<TargetKey | undefined>(undefined);
-  const [locked, setLocked] = useState<{ target: TargetKey; suggestions: string[]; items: { code: string; name: string; toLetter: Letter; credit: number }[] } | null>(null);
+  const [target, setTarget] = useState<TargetKey | undefined>(() => {
+    try {
+      const v = localStorage.getItem('targetGoal') as TargetKey | null;
+      if (v === 'KHA' || v === 'GIOI' || v === 'XUATSAC') return v;
+    } catch {/* ignore */}
+    return undefined;
+  });
+  const [currentStudySem, setCurrentStudySem] = useState<string | undefined>(() => {
+    try {
+      return localStorage.getItem('currentStudySem') || undefined;
+    } catch {
+      return undefined;
+    }
+  });
 
   const semesterList = (baseData?.semesters ?? []).map((s) => ({ value: s.semester, label: s.semester }));
   const initialCourses = useMemo<EditableCourse[]>(() => {
@@ -325,105 +337,179 @@ export default function ResultsPage() {
   }, [courses, baseData, semesterKey, semCourses]);
 
   const goalSuggestions = useMemo(() => {
-    if (!target) return { need: 0, suggestions: [] as string[], items: [] as { code: string; name: string; toLetter: Letter; credit: number }[], reached: false };
+    if (!target || !baseData) {
+      return {
+        need: 0,
+        suggestions: [] as string[],
+        items: [] as { sem?: string; code: string; name: string; toLetter: Letter; credit: number }[],
+        reached: false,
+      };
+    }
+
     const threshold = TARGETS.find((t) => t.value === target)!.threshold4;
 
-    // Nếu đã đạt mục tiêu rồi
-    if ((semStats.cumCrForGpa || 0) > 0 && (semStats.cum4 || 0) >= threshold) {
-      return { need: 0, suggestions: ["Bạn đã đạt mục tiêu 🎉"], items: [], reached: true };
-    }
+    // GỢI Ý CHO TẤT CẢ CÁC HỌC KỲ CÙNG LÚC (GLOBAL GREEDY)
+    // - Tính GPA tích lũy toàn khóa.
+    // - Chọn một số môn ở nhiều kỳ sao cho nâng chúng lên sẽ giúp đạt mục tiêu.
 
-    // Nếu chưa có tín chỉ tích lũy (tân sinh viên): gợi ý cùng một mức tối thiểu cho TẤT CẢ môn của kỳ hiện tại
-    if ((semStats.cumCrForGpa || 0) === 0) {
-      const curCourses = courses.filter((c) => (c as any).countInGpa !== false);
-      const curCr = curCourses.reduce((s, c) => s + ((c as any).credit || 0), 0);
-      if (curCr === 0) return { need: 0, suggestions: [], items: [], reached: false };
-      let reqAvg4 = threshold; // toàn bộ mẫu = tín chỉ kỳ này
-      reqAvg4 = Math.max(1.0, Math.min(4.0, +reqAvg4.toFixed(2)));
-      const rung4eq: { val: number; letter: Letter }[] = [
-        { val: 1.0, letter: 'D' }, { val: 1.5, letter: 'D+' }, { val: 2.0, letter: 'C' }, { val: 2.5, letter: 'C+' },
-        { val: 3.0, letter: 'B' }, { val: 3.5, letter: 'B+' }, { val: 3.7, letter: 'A' }, { val: 4.0, letter: 'A+' },
-      ];
-      const letter = (rung4eq.find((r) => r.val >= reqAvg4) || rung4eq[rung4eq.length - 1]).letter;
-      const items = curCourses.map((c) => ({ code: (c as any).code, name: (c as any).name, credit: (c as any).credit || 0, toLetter: letter }));
-      const suggestions = items.map((p) => `Mục tiêu ${p.code} – ${p.name}: ≥ ${p.toLetter} (~${letterTo10[p.toLetter]}/10)`);
-      return { need: 0, suggestions, items, reached: false };
-    }
+    type Cand = { sem: string; code: string; name: string; credit: number; current4: number };
 
-    // Trường hợp đã qua nhiều học kỳ: gợi ý cải thiện nhiều môn (đa học kỳ) tối ưu để đạt mục tiêu
-    let denom = semStats.cumCrForGpa || 0;
-    let sum4 = semStats.cumSum4 || 0;
-    let gap = threshold * denom - sum4;
+    let sumCr = 0;
+    let sum4 = 0;
+    const cands: Cand[] = [];
 
-    const semNumOf = (hk: string) => {
-      const m = hk.match(/HK(\d+)/i); return m ? parseInt(m[1], 10) : 0;
+    const semIndex = (hk: string) => {
+      const m = hk.match(/HK(\d+)/i);
+      return m ? parseInt(m[1], 10) : 0;
     };
-    const currentNum = semNumOf(semesterKey);
 
-    const rung4: { val: number; letter: Letter }[] = [
-      { val: 2.0, letter: 'C' }, { val: 2.5, letter: 'C+' }, { val: 3.0, letter: 'B' }, { val: 3.5, letter: 'B+' }, { val: 3.7, letter: 'A' }, { val: 4.0, letter: 'A+' },
-    ];
-    type State = { code: string; name: string; credit: number; base4: number; counted: boolean; level: number; suggested?: number; isLow: boolean };
-    const states: State[] = [];
+    const limitIndex = currentStudySem ? semIndex(currentStudySem) : Infinity;
+    const allSemKeys = baseData.semesters
+      .map((s) => s.semester)
+      .filter((hk) => semIndex(hk) <= limitIndex);
 
-    const baseSemesters2 = baseData?.semesters ?? [];
-    for (const sem of baseSemesters2) {
-      const semNum = semNumOf(sem.semester); if (semNum > currentNum) continue;
-      const list: (CourseResult | EditableCourse)[] = sem.semester === semesterKey ? courses : ((semCourses[sem.semester] as (EditableCourse[] | undefined)) ?? mapFromBase(sem.semester));
-      const isCurrentSem = semNum === currentNum;
+    for (const hk of allSemKeys) {
+      const list: (CourseResult | EditableCourse)[] =
+        hk === semesterKey ? courses : (semCourses[hk] ?? mapFromBase(hk));
+      if (!list || !list.length) continue;
+
+      const hasAnyGraded = list.some((c) => {
+        const baseGrade = (c as CourseResult).grade;
+        const hasLetters =
+          (c as any).gradeLetter !== undefined ||
+          (c as any).improveGradeLetter !== undefined;
+        return baseGrade !== undefined || hasLetters;
+      });
+      if (!hasAnyGraded) continue;
+
       for (const c of list) {
-        const countGpa = (c as any).countInGpa !== false; if (!countGpa) continue;
+        if ((c as any).countInGpa === false) continue;
         const credit = (c as any).credit || 0;
-        const hasLetters = (c as any).gradeLetter !== undefined || (c as any).improveGradeLetter !== undefined;
-        const hasRaw = (c as CourseResult).grade !== undefined;
-        if (!isCurrentSem && !(hasLetters || hasRaw)) continue; // chỉ xét môn đã có điểm ở kỳ trước
-        let best4 = 0; let best10: number | undefined = undefined;
+        if (!credit) continue;
+
+        let best4: number | undefined;
+        const hasLetters =
+          (c as any).gradeLetter !== undefined ||
+          (c as any).improveGradeLetter !== undefined;
         if (hasLetters) {
           const _c = c as any as EditableCourse & { improveGradeLetter?: Letter };
           const gMain4 = _c.gradeLetter ? letterTo4[_c.gradeLetter] : -1;
           const gImp4 = _c.improveGradeLetter ? letterTo4[_c.improveGradeLetter] : -1;
-          best4 = Math.max(gMain4, gImp4, 0);
-          const gMain10 = _c.gradeLetter ? letterTo10[_c.gradeLetter] : -1;
-          const gImp10 = _c.improveGradeLetter ? letterTo10[_c.improveGradeLetter] : -1;
-          best10 = Math.max(gMain10, gImp10);
-        } else {
-          const g10raw = (c as CourseResult).grade; best10 = g10raw; best4 = g10raw !== undefined ? (gradeToFour(g10raw) ?? 0) : 0;
+          const v = Math.max(gMain4, gImp4);
+          best4 = v >= 0 ? v : undefined;
+        } else if ((c as CourseResult).grade !== undefined) {
+          best4 = gradeToFour((c as CourseResult).grade!) ?? undefined;
         }
-        const counted = (best10 ?? 0) >= 4;
-        states.push({ code: (c as any).code, name: (c as any).name, credit, base4: best4, counted, level: best4, isLow: best4 <= 2.5 });
+
+        if (best4 === undefined) continue;
+
+        sumCr += credit;
+        sum4 += best4 * credit;
+
+        if (best4 < threshold) {
+          cands.push({
+            sem: hk,
+            code: (c as any).code,
+            name: (c as any).name,
+            credit,
+            current4: best4,
+          });
+        }
       }
     }
-    if (!states.length) return { need: +gap.toFixed(2), suggestions: [], items: [], reached: false };
 
-    const nextStep = (s: State): { nextVal: number; letter: Letter; dSum: number; dDen: number } | null => {
-      const cand = rung4.find((r) => r.val > s.level) || null; if (!cand) return null;
-      const dVal = cand.val - s.level; const dSum = dVal * s.credit; const dDen = s.counted ? 0 : s.credit; return { nextVal: cand.val, letter: cand.letter, dSum, dDen };
+    if (sumCr === 0) {
+      return {
+        need: 0,
+        suggestions: [],
+        items: [],
+        reached: false,
+      };
+    }
+
+    const currentGpa4 = sum4 / sumCr;
+
+    if (currentGpa4 >= threshold) {
+      return {
+        need: 0,
+        suggestions: ['Bạn đã đạt mục tiêu với điểm trung bình tích lũy hiện tại.'],
+        items: [],
+        reached: true,
+      };
+    }
+
+    if (!cands.length) {
+      return {
+        need: +(threshold - currentGpa4).toFixed(2),
+        suggestions: ['Cần cải thiện điểm nhưng không có môn nào có thể nâng thêm.'],
+        items: [],
+        reached: false,
+      };
+    }
+
+    // Sắp xếp: điểm thấp trước, tín chỉ cao trước
+    cands.sort((a, b) => {
+      if (a.current4 !== b.current4) return a.current4 - b.current4;
+      return b.credit - a.credit;
+    });
+
+    // Greedy: chọn dần các môn có lợi nhất cho GPA tích lũy
+    let neededExtra = threshold * sumCr - sum4;
+    const chosen: Cand[] = [];
+
+    for (const cand of cands) {
+      if (neededExtra <= 0) break;
+      const delta = (threshold - cand.current4) * cand.credit;
+      if (delta <= 0) continue;
+      chosen.push(cand);
+      neededExtra -= delta;
+    }
+
+    const rung4eq: { val: number; letter: Letter }[] = [
+      { val: 2.0, letter: 'C' }, { val: 2.5, letter: 'C+' },
+      { val: 3.0, letter: 'B' }, { val: 3.5, letter: 'B+' },
+      { val: 3.7, letter: 'A' }, { val: 4.0, letter: 'A+' },
+    ];
+    const targetLetter =
+      rung4eq.find((r) => r.val >= threshold)?.letter || 'B+' as Letter;
+
+    const items = chosen.map((c) => ({
+      sem: c.sem,
+      code: c.code,
+      name: c.name,
+      credit: c.credit,
+      toLetter: targetLetter,
+    }));
+
+    const suggestions = items.map(
+      (p) =>
+        `Ưu tiên nâng [${p.sem}] ${p.code} – ${p.name} lên ≥ ${p.toLetter} (~${letterTo10[p.toLetter]}/10)`,
+    );
+
+    return {
+      need: +Math.max(0, threshold - currentGpa4).toFixed(2),
+      suggestions,
+      items,
+      reached: false,
     };
-    const bias = (s: State) => (s.isLow ? 0.0001 : 0);
-    let safety = 0;
-    while (gap > 1e-6 && safety < 1000) {
-      safety++;
-      let bestIdx = -1; let bestScore = -Infinity; let bestStep: { nextVal: number; letter: Letter; dSum: number; dDen: number } | null = null;
-      for (let i = 0; i < states.length; i++) {
-        const s = states[i]; const step = nextStep(s); if (!step) continue; const score = (step.dSum - threshold * step.dDen) + bias(s);
-        if (score > bestScore) { bestScore = score; bestIdx = i; bestStep = step; }
-      }
-      if (bestIdx === -1 || !bestStep) break;
-      const s = states[bestIdx]; s.level = bestStep.nextVal; s.suggested = bestStep.nextVal; if (!s.counted && bestStep.dDen > 0) s.counted = true; denom += bestStep.dDen; sum4 += bestStep.dSum; gap = threshold * denom - sum4;
-    }
-    const items = states.filter((s) => s.suggested !== undefined && s.suggested! > s.base4).sort((a, b) => (a.base4 - b.base4) || (b.credit - a.credit)).map((s) => ({ code: s.code, name: s.name, toLetter: (rung4.find((r) => r.val === s.suggested)!.letter), credit: s.credit }));
-    const suggestions = items.map((p) => `Cải thiện ${p.code} – ${p.name} lên ${p.toLetter} (~${letterTo10[p.toLetter]}/10)`);
-    return { need: +Math.max(0, gap).toFixed(2), suggestions, items, reached: items.length === 0 };
-  }, [target, semStats, baseData, courses, semCourses, semesterKey]);
+  }, [target, baseData, courses, semCourses, semesterKey, currentStudySem]);
 
-  // Khóa gợi ý ngay khi chọn mục tiêu; không tự đổi khi bạn chỉnh điểm
+  // Đồng bộ "kỳ học hiện tại" được chọn ở trang Tiến trình (lưu trong localStorage)
   useEffect(() => {
-    if (target) {
-      setLocked({ target, suggestions: goalSuggestions.suggestions, items: goalSuggestions.items });
-    } else {
-      setLocked(null);
-    }
-  }, [target]);
+    const sync = () => {
+      try {
+        setCurrentStudySem(localStorage.getItem('currentStudySem') || undefined);
+      } catch {
+        setCurrentStudySem(undefined);
+      }
+    };
+    window.addEventListener('storage', sync);
+    window.addEventListener('current-study-sem-changed', sync as any);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('current-study-sem-changed', sync as any);
+    };
+  }, []);
 
   return (
     <div className="container">
@@ -433,14 +519,30 @@ export default function ResultsPage() {
         </Typography.Title>
 
         <div className="results-top" style={{ display: 'flex', gap: 8 }}>
-          <Select options={semesterList} value={semesterKey} onChange={onChangeSemester} style={{ minWidth: 220 }} />
-                <Select
+          <Select
+            options={semesterList}
+            value={semesterKey}
+            onChange={onChangeSemester}
+            style={{ width: 120 }}
+          />
+          <Select
             allowClear
             placeholder={
               <span><AimOutlined style={{ color: '#b91c1c', marginRight: 6 }} />Đặt mục tiêu</span>
             }
             value={target as any}
-            onChange={(v) => setTarget(v as TargetKey)}
+            onChange={(v) => {
+              const val = v as TargetKey | undefined;
+              setTarget(val);
+              try {
+                if (val) {
+                  localStorage.setItem('targetGoal', val);
+                } else {
+                  localStorage.removeItem('targetGoal');
+                }
+                window.dispatchEvent(new Event('target-goal-changed'));
+              } catch {/* ignore */}
+            }}
             options={TARGETS.map((t) => ({
               value: t.value,
               label: (
@@ -456,22 +558,35 @@ export default function ResultsPage() {
 
         {target && (
           <Card size="small">
-            {(locked?.target === target ? { ...goalSuggestions, suggestions: locked.suggestions, items: locked.items } : goalSuggestions).reached ? (
-              <Typography.Text strong style={{ color: '#16a34a' }}>Bạn đã đạt mục tiêu 🎉</Typography.Text>
+            {goalSuggestions.reached ? (
+              <Typography.Text strong style={{ color: '#16a34a' }}>
+                {goalSuggestions.suggestions[0] || 'Bạn đã đạt mục tiêu 🎉'}
+              </Typography.Text>
             ) : (
               <Space direction="vertical" size={6} style={{ width: '100%' }}>
                 <Typography.Text strong style={{ color: 'var(--color-secondary)' }}>
                   Gợi ý cải thiện để đạt mục tiêu:
                 </Typography.Text>
                 <div className="suggest-rows">
-                  {(locked?.target === target ? locked.items : goalSuggestions.items).map((it) => {
+                  {goalSuggestions.items.map((it) => {
                     const tag = letterTagColor(it.toLetter);
                     return (
-                      <div key={it.code + it.toLetter} className="suggest-row">
-                        <Typography.Text className="suggest-code" strong>{it.code}</Typography.Text>
-                        <Tag className="suggest-tag" style={{ marginInline: 0 }}>{it.credit} tín</Tag>
-                        <Typography.Text className="suggest-name">{it.name}</Typography.Text>
-                        <Tag color={tag.color} className="suggest-tag" style={{ marginInline: 0 }}>≥ {tag.text}</Tag>
+                      <div key={`${it.sem ?? 'ALL'}-${it.code}-${it.toLetter}`} className="suggest-row">
+                        <Tag className="suggest-tag" style={{ marginInline: 0 }}>
+                          {it.sem ?? 'HK?'}
+                        </Tag>
+                        <Typography.Text className="suggest-code" strong>
+                          {it.code}
+                        </Typography.Text>
+                        <Tag className="suggest-tag" style={{ marginInline: 0 }}>
+                          {it.credit} tín
+                        </Tag>
+                        <Typography.Text className="suggest-name">
+                          {it.name}
+                        </Typography.Text>
+                        <Tag color={tag.color} className="suggest-tag" style={{ marginInline: 0 }}>
+                          ≥ {tag.text}
+                        </Tag>
                       </div>
                     );
                   })}
@@ -630,5 +745,6 @@ export default function ResultsPage() {
     </div>
   );
 }
+
 
 
