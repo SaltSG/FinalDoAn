@@ -8,8 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "eslint . --ext .ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "set-admin": "tsx scripts/set-admin.ts"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
@@ -28,7 +27,6 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/multer": "^1.4.13",
     "@types/node": "^20.11.30",
     "@typescript-eslint/eslint-plugin": "^8.8.1",
     "@typescript-eslint/parser": "^8.8.1",

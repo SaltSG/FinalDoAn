@@ -6,16 +6,23 @@ export interface IUser extends Document {
   passwordHash?: string;
   provider: 'local' | 'google';
   picture?: string;
-  role: 'user' | 'admin';
+  role?: 'user' | 'admin';
+  status?: 'active' | 'locked';
+  lastLoginAt?: Date;
 }
 
-const UserSchema = new Schema<IUser>({
-  email: { type: String, required: true, unique: true, index: true },
-  name: { type: String, required: true },
-  passwordHash: { type: String },
-  provider: { type: String, enum: ['local', 'google'], required: true },
-  picture: { type: String },
-  role: { type: String, enum: ['user', 'admin'], default: 'user', index: true },
-}, { timestamps: true });
+const UserSchema = new Schema<IUser>(
+  {
+    email: { type: String, required: true, unique: true, index: true },
+    name: { type: String, required: true },
+    passwordHash: { type: String },
+    provider: { type: String, enum: ['local', 'google'], required: true },
+    picture: { type: String },
+    role: { type: String, enum: ['user', 'admin'], default: 'user', index: true },
+    status: { type: String, enum: ['active', 'locked'], default: 'active', index: true },
+    lastLoginAt: { type: Date },
+  },
+  { timestamps: true }
+);
 
 export const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);

@@ -79,12 +79,7 @@ export const markRead: RequestHandler = async (req, res) => {
 export const uploadFile: RequestHandler = async (req, res) => {
   const userId = String((req as any).user?.id || '');
   if (!userId) return res.status(401).json({ message: 'unauthorized' });
-  const f = (req as any).file as {
-    filename?: string;
-    originalname: string;
-    size: number;
-    mimetype: string;
-  } | undefined;
+  const f = (req as any).file as any | undefined;
   if (!f) return res.status(400).json({ message: 'file_required' });
   const url = buildPublicUrl(path.basename(f.filename || f.originalname));
   return res.json({
@@ -96,6 +91,26 @@ export const uploadFile: RequestHandler = async (req, res) => {
       mimeType: f.mimetype,
     },
   });
+};
+
+// List all attachments by type (no pagination, caution for large datasets)
+export const listAttachments: RequestHandler = async (req, res) => {
+  const room = String(req.query.room || 'global');
+  const type = String(req.query.type || 'file'); // image | video | file
+  const base: any = { room, 'attachment.url': { $exists: true, $ne: '' } };
+  if (type === 'image') {
+    base['attachment.mimeType'] = { $regex: '^image/' };
+  } else if (type === 'video') {
+    base['attachment.mimeType'] = { $regex: '^video/' };
+  } else {
+    // file: not image and not video
+    base.$and = [
+      { $or: [{ 'attachment.mimeType': { $exists: false } }, { 'attachment.mimeType': { $eq: '' } }, { 'attachment.mimeType': { $not: /^image\// } }] },
+      { $or: [{ 'attachment.mimeType': { $exists: false } }, { 'attachment.mimeType': { $eq: '' } }, { 'attachment.mimeType': { $not: /^video\// } }] },
+    ];
+  }
+  const docs = await ChatMessage.find(base).sort({ createdAt: 1 }).lean();
+  res.json({ data: docs });
 };
 
 

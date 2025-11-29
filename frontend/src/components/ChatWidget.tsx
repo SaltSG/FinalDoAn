@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Input, Typography, Avatar } from 'antd';
-import { MessageOutlined, SendOutlined, CloseOutlined, PaperClipOutlined, PictureOutlined } from '@ant-design/icons';
+import { MessageOutlined, SendOutlined, CloseOutlined, PaperClipOutlined, PictureOutlined, DownOutlined } from '@ant-design/icons';
 import { getAuthUser, getAuthToken as getTokenFn } from '../services/auth';
-import { ChatMessageDto, fetchMessages, sendMessage as sendMessageRest, subscribe as subscribeSse, getUnreadCount as getUnreadApi, markRead as markReadApi, uploadChatFile, resolveFileUrl } from '../services/chat';
+import { ChatMessageDto, fetchMessages, sendMessage as sendMessageRest, subscribe as subscribeSse, getUnreadCount as getUnreadApi, markRead as markReadApi, uploadChatFile, resolveFileUrl, fetchAttachments } from '../services/chat';
 import { subscribeToRoom, sendChat, sendTyping } from '../services/realtime';
 import { sendRead } from '../services/realtime';
 import { getAuthToken } from '../services/auth';
 
-type Props = { room?: string };
+type Props = { room?: string; showFilter?: boolean };
 
-export default function ChatWidget({ room = 'global' }: Props) {
+export default function ChatWidget({ room = 'global', showFilter = false }: Props) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
+  const [filter, setFilter] = useState<'all' | 'image' | 'video' | 'file'>('all');
+  const [filterOpen, setFilterOpen] = useState<boolean>(!!showFilter);
+  const [remoteAttachments, setRemoteAttachments] = useState<ChatMessageDto[] | null>(null);
   const [draft, setDraft] = useState('');
   const typingTimer = useRef<number | null>(null);
   const [authUser, setAuthUserState] = useState(getAuthUser());
@@ -241,6 +244,63 @@ export default function ChatWidget({ room = 'global' }: Props) {
     return undefined;
   }, [messages, authUser?.id]);
 
+  const visibleMessages = useMemo(() => {
+    if (remoteAttachments) return remoteAttachments;
+    if (filter === 'all') return messages;
+    return messages.filter((m) => {
+      const hasAttachment = !!(m.attachment && typeof (m.attachment as any).url === 'string' && (m.attachment as any).url);
+      if (!hasAttachment) return false;
+      const ext = (m.attachment?.name || '').toLowerCase().split('.').pop() || '';
+      const mt = m.attachment?.mimeType || '';
+      if (filter === 'image') {
+        return mt.startsWith('image/') || ['jpg','jpeg','png','gif','webp','bmp','svg'].includes(ext);
+      }
+      if (filter === 'video') {
+        return mt.startsWith('video/');
+      }
+      // 'file' => tài liệu: không phải image/video
+      const isImage = mt.startsWith('image/') || ['jpg','jpeg','png','gif','webp','bmp','svg'].includes(ext);
+      const isVideo = mt.startsWith('video/');
+      return hasAttachment && !isImage && !isVideo;
+    });
+  }, [messages, filter, remoteAttachments]);
+
+  const hasVideo = useMemo(() => {
+    for (const m of messages) {
+      const url = (m.attachment as any)?.url as string | undefined;
+      if (!url) continue;
+      const mt = m.attachment?.mimeType || '';
+      const ext = (m.attachment?.name || '').toLowerCase().split('.').pop() || '';
+      if (mt.startsWith('video/') || ['mp4','mov','webm','mkv','avi'].includes(ext)) return true;
+    }
+    return false;
+  }, [messages]);
+
+  useEffect(() => {
+    if (filter === 'video' && !hasVideo) setFilter('all');
+  }, [filter, hasVideo]);
+
+  useEffect(() => {
+    setFilterOpen(!!showFilter);
+  }, [showFilter]);
+
+  // Fetch full attachments from backend when user selects a filter (no pagination as requested)
+  useEffect(() => {
+    let cancelled = false;
+    if (filter === 'all') {
+      setRemoteAttachments(null);
+      return;
+    }
+    fetchAttachments(room, filter).then((items) => {
+      if (cancelled) return;
+      setRemoteAttachments(items || []);
+    }).catch(() => {
+      if (cancelled) return;
+      setRemoteAttachments(null); // fallback to local filter if API fails
+    });
+    return () => { cancelled = true; };
+  }, [filter, room]);
+
   const handleSend = async () => {
     const content = draft.trim();
     if (!content) return;
@@ -271,12 +331,49 @@ export default function ChatWidget({ room = 'global' }: Props) {
       {open && (
         <div className="chat-panel">
           <div className="chat-header">
-            <Typography.Text className="chat-title" strong>Chat sinh viên{getAuthToken() ? ` • ${onlineCount} online` : ''}</Typography.Text>
-            <Button type="text" className="chat-close" aria-label="Đóng" onClick={() => { setOpen(false); try { lastSeenRef.current = Date.now(); localStorage.setItem(lastSeenKey, String(lastSeenRef.current)); } catch {} }} icon={<CloseOutlined />} />
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <Typography.Text className="chat-title" strong>Chat sinh viên</Typography.Text>
+              {getAuthToken() && (
+                <>
+                  <span className={`chat-online-dot ${onlineCount > 0 ? 'on' : 'off'}`} />
+                  <Typography.Text className="chat-online-text">{`${onlineCount} online`}</Typography.Text>
+                </>
+              )}
+            </div>
+            <div className="chat-header-actions">
+              <Button
+                type="text"
+                className="chat-filter-toggle"
+                aria-label="Bộ lọc"
+                onClick={() => setFilterOpen((v) => !v)}
+                icon={<DownOutlined className={filterOpen ? 'chat-arrow-rotated' : ''} />}
+              />
+              <Button
+                type="text"
+                className="chat-close"
+                aria-label="Đóng"
+                onClick={() => {
+                  setOpen(false);
+                  try {
+                    lastSeenRef.current = Date.now();
+                    localStorage.setItem(lastSeenKey, String(lastSeenRef.current));
+                  } catch {}
+                }}
+                icon={<CloseOutlined />}
+              />
+            </div>
           </div>
           <div className="chat-body">
+            {filterOpen && (
+              <div className="chat-filter-row">
+                <button className={`chat-filter-btn${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>Tất cả</button>
+                <button className={`chat-filter-btn${filter === 'image' ? ' active' : ''}`} onClick={() => setFilter('image')}>Ảnh</button>
+                {hasVideo && <button className={`chat-filter-btn${filter === 'video' ? ' active' : ''}`} onClick={() => setFilter('video')}>Video</button>}
+                <button className={`chat-filter-btn${filter === 'file' ? ' active' : ''}`} onClick={() => setFilter('file')}>Tài liệu</button>
+              </div>
+            )}
             <div className="chat-list" ref={listRef}>
-              {messages.map((m) => {
+              {visibleMessages.map((m) => {
                 const isMine = (m.userId && authUser?.id && m.userId === authUser.id);
                 const isLastMine = isMine && lastMineId && m._id === lastMineId;
                 const readCount = isLastMine ? Object.keys(readBy[m._id] || {}).length : 0;

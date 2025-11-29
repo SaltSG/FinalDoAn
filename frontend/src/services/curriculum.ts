@@ -14,12 +14,13 @@ export async function fetchCurriculum(spec: 'dev' | 'design'): Promise<ProgressD
       credit: c.credit,
       countInGpa: c.countInGpa !== false,
       countInCredits: c.countInCredits !== false,
+      category: c.category,
     })),
   }));
   return { specialization: data?.specialization ?? spec, semesters } as ProgressData;
 }
 
-export async function addCourseToCurriculum(spec: 'dev' | 'design', semester: string, course: { code: string; name: string; credit: number; countInGpa?: boolean; countInCredits?: boolean }) {
+export async function addCourseToCurriculum(spec: 'dev' | 'design', semester: string, course: { code: string; name: string; credit: number; countInGpa?: boolean; countInCredits?: boolean; category?: string }) {
   const res = await fetch(`/api/curriculum/${encodeURIComponent(spec)}/course`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -31,7 +32,7 @@ export async function addCourseToCurriculum(spec: 'dev' | 'design', semester: st
 
 export async function updateCourseInCurriculum(
   spec: 'dev' | 'design',
-  update: { code: string; name?: string; credit?: number; countInGpa?: boolean; countInCredits?: boolean }
+  update: { code: string; name?: string; credit?: number; countInGpa?: boolean; countInCredits?: boolean; category?: string }
 ) {
   const res = await fetch(`/api/curriculum/${encodeURIComponent(spec)}/course`, {
     method: 'PUT',
@@ -55,6 +56,7 @@ export type CurriculumCourse = {
   credit: number;
   countInGpa?: boolean;
   countInCredits?: boolean;
+  category?: string;
 };
 
 export type CurriculumDoc = {
@@ -69,6 +71,10 @@ async function getJson(path: string) {
   return res.json();
 }
 
+export async function fetchCurriculumDoc(spec: 'dev' | 'design'): Promise<CurriculumDoc> {
+  return getJson(`/api/curriculum/${encodeURIComponent(spec)}`) as Promise<CurriculumDoc>;
+}
+
 export async function fetchCurriculumAsProgress(specialization: string): Promise<ProgressData> {
   const rs = await getJson(`/api/curriculum/${encodeURIComponent(specialization)}`) as CurriculumDoc;
   const progress: ProgressData = {
@@ -81,6 +87,7 @@ export async function fetchCurriculumAsProgress(specialization: string): Promise
         credit: c.credit,
         countInGpa: c.countInGpa !== false,
         countInCredits: c.countInCredits !== false,
+        category: c.category,
         // grade/status không có ở curriculum -> để undefined
       })),
     })),

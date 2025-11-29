@@ -5,6 +5,7 @@ export type AuthUser = {
   picture?: string;
   provider: 'local' | 'google';
   role?: 'user' | 'admin';
+  status?: 'active' | 'locked';
 };
 
 const LS_KEY = 'auth.user';

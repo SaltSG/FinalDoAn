@@ -5,7 +5,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import { createRedisClients } from '../config/redis';
 import { ChatMessage } from '../models/ChatMessage';
 
-type JwtClaims = { id: string; name?: string; email?: string; role?: string };
+type JwtClaims = { id: string; name?: string; email?: string };
 
 type ServerToClientEvents = {
   'chat:message': (payload: any) => void;
@@ -61,7 +61,7 @@ export async function initializeSocket(httpServer: HttpServer) {
       const secret = process.env.JWT_SECRET || 'dev_secret_change_me';
       const decoded = jwt.verify(String(token), secret) as JwtClaims;
       if (!decoded?.id) return next(new Error('unauthorized'));
-      (socket.data as any).user = { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role };
+      (socket.data as any).user = { id: decoded.id, name: decoded.name, email: decoded.email };
       next();
     } catch {
       next(new Error('unauthorized'));

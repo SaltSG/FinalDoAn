@@ -67,17 +67,6 @@ npm run dev
 - `backend/.env` (tham khảo `backend/.env.example`)
 - `frontend/.env` (không bắt buộc do đã cấu hình proxy)
 
-### Thiết lập Admin
-Để set một user thành admin, xem file [ADMIN_SETUP.md](./ADMIN_SETUP.md)
-
-Cách nhanh nhất:
-```bash
-cd backend
-npm run set-admin <email>
-```
-
-Sau đó đăng xuất và đăng nhập lại để thấy menu "Quản trị".
-
 ### Cộng tác qua Git
 1. Khởi tạo repo, đẩy lên GitHub, mời collaborator
 2. Tạo nhánh từ `main`, mở Pull Request để review

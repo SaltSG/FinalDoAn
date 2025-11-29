@@ -38,6 +38,9 @@ html, body, #root { overflow-x: hidden; }
 .brand {
   color: var(--color-secondary);
   margin: 0;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: .3px;
 }
 
 .brand .highlight {
@@ -61,12 +64,13 @@ html, body, #root { overflow-x: hidden; }
 .navbar {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 12px;
+  padding: 8px 20px 8px 24px;
+  min-height: 56px;
   background: linear-gradient(90deg, var(--color-secondary), #152840);
   color: var(--text-inverse);
 }
@@ -74,7 +78,13 @@ html, body, #root { overflow-x: hidden; }
 .navbar-logo { width: 0; height: 0; display: none; }
 .navbar-logo-placeholder { width: 0; height: 0; display: none; }
 .navbar-title { font-weight: 700; letter-spacing: 0.2px; }
-.navbar-right { display: flex; align-items: center; gap: 4px; }
+.navbar-right { 
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  gap: 12px; 
+  margin-top: -2px;
+}
 
 .container { max-width: none; margin: 10px 10px; padding: 0; }
 .hero { margin-bottom: 16px; }
@@ -103,7 +113,7 @@ html, body, #root { overflow-x: hidden; }
 .sider-header { display: flex; align-items: center; justify-content: flex-start; padding: 8px 8px 8px 8px; }
 .sider-logo { width: 72px; height: 72px; object-fit: contain; }
 .sider-logo.placeholder { width: 72px; height: 72px; border-radius: 12px; background: var(--color-primary); }
-.content { min-height: 100vh; display: flex; flex-direction: column; }
+.content { height: calc(100vh - 64px); overflow: auto; }
 .ant-layout-sider-trigger { background: #f3f4f6; color: #111827; border-top: 1px solid #e5e7eb; }
 
 /* Progress page grid */
@@ -357,62 +367,68 @@ html, body, #root { overflow-x: hidden; }
 .auth-forgot:hover { text-decoration: underline; }
 
 /* User dropdown trigger animation */
-.user-trigger { transition: transform 140ms ease, filter 160ms ease; }
+.user-trigger { 
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 140ms ease, filter 160ms ease; 
+  line-height: 1;
+}
 .user-trigger:hover { transform: translateY(-1px); filter: brightness(1.05); }
 
 /* Navbar bell button */
 .nav-bell-btn {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 9999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  line-height: 36px;
-  margin-top: 0; /* reset margin */
-  position: relative;
-  top: 6px; /* hạ chuông xuống cho thẳng với avatar */
+  margin: 0;
   overflow: visible;
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(245, 158, 11, 0.45);
   color: var(--color-primary);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
   transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+  vertical-align: middle;
+  transform: translateY(-2px);
 }
-.nav-bell-btn:hover {
-  background: rgba(245, 158, 11, 0.18);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+.nav-bell-btn .anticon { font-size: 24px; }
+
+/* Slight upward nudge and move to right */
+.navbar-right { 
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  gap: 16px; 
+  margin-top: -5px;
+  margin-right: 20px; /* push group to the far right */
 }
-.nav-bell-btn .anticon { font-size: 20px; }
-.nav-bell-btn .ant-badge { width: 100%; height: 100%; display: inline-flex; align-items: center; justify-content: center; }
-.nav-bell-badge .ant-badge-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(21, 40, 64, 1);
-  top: 10px;
-  right: 6px;
-  z-index: 3;
+
+/* Make user name and avatar smaller a bit */
+.user-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  transition: transform 140ms ease, filter 160ms ease;
+  line-height: 1;
+  font-size: 16px;
 }
-.nav-bell-badge .ant-badge-count {
-  background: var(--color-primary);
-  color: #111;
-  font-weight: 700;
-  box-shadow: 0 0 0 2px rgba(21, 40, 64, 1);
-  min-width: 18px;
-  height: 18px;
-  line-height: 18px;
-  top: 10px;
-  right: 4px;
-  z-index: 3;
+.user-trigger .ant-avatar {
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  font-size: 18px;
 }
+.user-trigger .anticon { font-size: 16px; }
 
 /* Dropdown overlay pop-in */
 .ant-dropdown .ant-dropdown-menu { 
   animation: dropdown-pop 160ms cubic-bezier(.21,1.02,.73,1) both;
   transform-origin: top right;
+  min-width: 220px; /* cố định khung đủ rộng, không co theo tên */
 }
 @keyframes dropdown-pop {
   from { opacity: 0; transform: translateY(-4px) scale(0.98); }
@@ -428,6 +444,117 @@ html, body, #root { overflow-x: hidden; }
   background: #f8f9fa;
   min-height: 100vh;
   padding: 10px; /* sát vào sidebar/navbar giống các trang khác */
+}
+
+/* Admin page layout (reuse same spacing as deadline page) */
+.admin-page-container {
+  background: #f8f9fa;
+  min-height: 100vh;
+  padding: 10px;
+}
+.admin-page-header {
+  margin-bottom: 12px;
+}
+
+.admin-stats-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.admin-stats-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  text-align: left;
+}
+.admin-stats-number {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1f3b5b;
+  margin-bottom: 4px;
+}
+.admin-stats-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.admin-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.admin-chart-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 12px 14px 10px;
+  border: 1px solid #e5e7eb;
+}
+.admin-chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+.admin-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 72px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+.admin-chart-bar-wrap {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+}
+.admin-chart-bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+}
+.admin-chart-bar.total {
+  background: linear-gradient(180deg, #1f3b5b, #60a5fa);
+}
+.admin-chart-bar.new {
+  background: linear-gradient(180deg, #f59e0b, #fed7aa);
+}
+.admin-chart-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Admin Curriculum Page */
+.admin-curriculum-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.admin-curriculum-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.admin-curriculum-legend-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.progress-legend-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding-top: 8px;
+  margin-top: 8px;
+  background: linear-gradient(to top, rgba(245, 247, 250, 0.95), rgba(245, 247, 250, 0));
 }
 
 /* Stats Overview */
@@ -606,6 +733,31 @@ html, body, #root { overflow-x: hidden; }
 /* Modal: wrapClassName="deadline-modal" on AntD Modal */
 .deadline-modal .ant-modal-content { border-radius: 16px; }
 .deadline-modal .ant-modal-title { font-weight: 800; color: var(--color-secondary); }
+.deadline-modal .ant-modal-body {
+  padding-top: 16px;
+  padding-bottom: 10px;
+}
+.deadline-modal .ant-form-item {
+  margin-bottom: 12px;
+}
+.deadline-modal .ant-form-item-label > label {
+  font-size: 13px;
+}
+
+/* Calendar event modal – compact spacing */
+.calendar-event-modal .ant-modal-content {
+  border-radius: 14px;
+}
+.calendar-event-modal .ant-modal-body {
+  padding-top: 12px;
+  padding-bottom: 6px;
+}
+.calendar-event-modal .ant-form-item {
+  margin-bottom: 10px;
+}
+.calendar-event-modal .ant-form-item-label > label {
+  font-size: 13px;
+}
 
 /* Deadline: additional elements moved from per-page CSS */
 .deadline-card-header {
@@ -812,7 +964,7 @@ html, body, #root { overflow-x: hidden; }
 .chat-fab:active { transform: translateY(0); box-shadow: 0 8px 20px rgba(0,0,0,.18); }
 
 /* Badge styling for unread count on chat button */
-.chat-fab-badge { /* overlay badge on the button corner */ }
+
 .chat-fab-badge .ant-badge-count {
   background: linear-gradient(180deg, #ef4444, #dc2626);
   color: #fff;
@@ -827,6 +979,121 @@ html, body, #root { overflow-x: hidden; }
   letter-spacing: .2px;
   pointer-events: none;
 }
+
+/* Chatbot floating button (above student chat) */
+.chatbot-fab-wrap {
+  position: fixed;
+  right: 18px;
+  bottom: 90px;
+  z-index: 1000;
+}
+.chatbot-fab {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 9999px;
+  padding: 0;
+  background: radial-gradient(circle at 30% 20%, #fef9c3, #f59e0b) !important;
+  border: 2px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 0 14px 32px rgba(245, 158, 11, 0.45);
+  color: #111827 !important;
+  backdrop-filter: blur(6px);
+  transform: translateY(-1px);
+}
+.chatbot-fab-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4), 0 6px 14px rgba(0, 0, 0, 0.18) inset;
+}
+
+/* Subtle breathing animation so chatbot nổi bật hơn một chút */
+@keyframes chatbot-pulse {
+  0%, 100% {
+    transform: translateY(-1px) scale(1);
+    box-shadow: 0 14px 32px rgba(245, 158, 11, 0.45);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.04);
+    box-shadow: 0 20px 40px rgba(245, 158, 11, 0.6);
+  }
+}
+.chatbot-fab {
+  animation: chatbot-pulse 2.8s ease-in-out infinite;
+}
+
+/* Robot face – kiểu robot (không phải mặt cười) */
+.chatbot-face {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.18);
+}
+.chatbot-face-sm {
+  transform: scale(0.88);
+}
+.chatbot-face::before {
+  /* anten trên đầu robot */
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  width: 2px;
+  height: 5px;
+  background: #111827;
+  transform: translateX(-50%);
+  border-radius: 999px;
+}
+.chatbot-face::after {
+  /* bóng anten tròn */
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  background: #facc15;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 1px #111827;
+}
+.chatbot-eye {
+  position: absolute;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #111827;
+}
+.chatbot-eye-left {
+  left: 6px;
+}
+.chatbot-eye-right {
+  right: 6px;
+}
+.chatbot-mouth {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  width: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: #111827; /* miệng ngang, không cong cười */
+  transform: translateX(-50%);
+}
+
 
 .chat-panel {
   position: fixed;
@@ -844,11 +1111,56 @@ html, body, #root { overflow-x: hidden; }
   overflow: hidden;
   z-index: 1000;
 }
+
+.chatbot-panel {
+  bottom: 90px;
+}
 .chat-header { background: linear-gradient(90deg, var(--color-secondary), #274a6d); color: #fff; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 0 rgba(0,0,0,.06); }
 .chat-title { color: #fff !important; }
-.chat-close { color: #fff !important; border: 1px solid rgba(255,255,255,.25) !important; border-radius: 999px !important; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; }
+.chat-header-actions { display: inline-flex; align-items: center; gap: 8px; }
+.chat-close { color: #fff !important; border: 1px solid rgba(255,255,255,.28) !important; border-radius: 999px !important; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; }
 .chat-close:hover { background: rgba(255,255,255,.12) !important; }
-.chat-close .anticon { font-size: 14px; }
+.chat-close .anticon { font-size: 16px; }
+.chat-filter-toggle { color: #fff !important; border: none !important; border-radius: 6px !important; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: transparent !important; }
+.chat-filter-toggle:hover { background: rgba(255,255,255,.12) !important; }
+.chat-filter-toggle .anticon { font-size: 12px; transition: transform .22s ease; }
+.chat-filter-toggle .anticon.chat-arrow-rotated { transform: rotate(180deg); }
+
+/* Chatbot-specific header layout */
+.chat-header-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.chatbot-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 30% 20%, #fef9c3, #fbbf24);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  color: #111827;
+}
+.chatbot-avatar .anticon {
+  font-size: 18px;
+}
+.chat-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-subtitle {
+  font-size: 11px;
+  color: #e5eef8 !important;
+}
+
+/* Presence indicator next to title */
+.chat-online-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+.chat-online-dot.on { background: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,.28); }
+.chat-online-dot.off { background: #fff; opacity: .95; }
+.chat-online-text { color: #e5eef8 !important; font-size: 12px; }
 .chat-body { flex: 1; padding: 8px 10px; background: linear-gradient(180deg,#fafafa,#ffffff); overflow: hidden; }
 .chat-list { height: 100%; overflow-y: auto; padding-right: 4px; }
 .chat-list { overflow-x: hidden; }
@@ -856,6 +1168,22 @@ html, body, #root { overflow-x: hidden; }
 .chat-list::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 999px; }
 .chat-list::-webkit-scrollbar-thumb { background: #cfd8e3; border-radius: 999px; border: 2px solid #f3f4f6; }
 .chat-list::-webkit-scrollbar-thumb:hover { background: #b6c2d1; }
+
+/* Global scrollbar – giống style chat, áp dụng cho toàn trang */
+*::-webkit-scrollbar {
+  width: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cfd8e3;
+  border-radius: 999px;
+  border: 2px solid #f3f4f6;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #b6c2d1;
+}
 .chat-input-row { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid #e6ebf3; background: #fff; }
 .chat-attach-btn { width: 36px; height: 36px; border-radius: 999px !important; border: 1px solid #e6ebf3 !important; background: #f9fafb !important; color: #374151 !important; display: inline-flex; align-items: center; justify-content: center; }
 .chat-attach-btn:hover { background: #f3f4f6 !important; border-color: #dbe5ef !important; color: #1f2937 !important; }
@@ -867,12 +1195,65 @@ html, body, #root { overflow-x: hidden; }
 .chat-input-row .ant-input { border-radius: 999px; border: 1px solid #e6ebf3; height: 36px; padding: 0 14px; }
 .chat-input-row .ant-input:focus, .chat-input-row .ant-input-focused { box-shadow: 0 0 0 2px rgba(31,59,91,.12); border-color: var(--color-secondary); }
 
+/* Chatbot input row: giống chat sinh viên nhưng chỉ có ô nhập + nút gửi */
+.chatbot-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid #e6ebf3;
+  background: #fff;
+}
+.chatbot-input-row .ant-input {
+  border-radius: 999px;
+  border: 1px solid #e6ebf3;
+  height: 36px;
+  padding: 0 14px;
+}
+.chatbot-input-row .ant-input:focus,
+.chatbot-input-row .ant-input-focused {
+  box-shadow: 0 0 0 2px rgba(31,59,91,.12);
+  border-color: var(--color-secondary);
+}
+
 /* Chat bubbles */
 .chat-list { padding-right: 4px; }
 .msg-row { display: flex; align-items: flex-end; gap: 6px; margin: 6px 0; }
 .msg-row.mine { justify-content: flex-end; }
 .msg-row.theirs { justify-content: flex-start; }
 .msg-avatar { background: var(--color-secondary); color: #fff; border: 2px solid #fff; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* Filter row */
+.chat-body { flex: 1; padding: 8px 10px; background: linear-gradient(180deg,#fafafa,#ffffff); overflow: hidden; position: relative; }
+.chat-list { height: 100%; overflow-y: auto; padding-right: 4px; }
+
+/* Slim scrollbar for notification popover – giống phần chat */
+.notif-popover .notif-list-scroll {
+  max-height: 320px; /* ~5 item, phần còn lại cuộn */
+  overflow-y: auto;
+}
+.notif-popover .notif-list-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.notif-popover .notif-list-scroll::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 999px;
+}
+.notif-popover .notif-list-scroll::-webkit-scrollbar-thumb {
+  background: #cfd8e3;
+  border-radius: 999px;
+  border: 2px solid #f3f4f6;
+}
+.notif-popover .notif-list-scroll::-webkit-scrollbar-thumb:hover {
+  background: #b6c2d1;
+}
+
+/* Filter row overlays without pushing messages */
+.chat-filter-row { position: absolute; left: 10px; right: 10px; top: 6px; display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #e6ebf3; background: #fff; z-index: 2; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+.chat-filter-btn { appearance: none; border: 1px solid #e6ebf3; background: #f9fafb; color: #374151; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.chat-filter-btn:hover { background: #f3f4f6; border-color: #dbe5ef; }
+.chat-filter-btn.active { background: #1f3b5b; color: #fff; border-color: #1f3b5b; }
 .msg-bubble { max-width: 72%; padding: 8px 12px; border-radius: 14px; border: 1px solid transparent; box-shadow: 0 1px 2px rgba(0,0,0,.06); word-break: break-word; overflow-wrap: anywhere; }
 .msg-bubble.mine { background: #fff7ea; border-color: #fde68a; color: #7c2d12; box-shadow: 0 2px 8px rgba(245,158,11,.12); }
 .msg-bubble.theirs { background: #ffffff; border-color: #e6ebf3; color: #111827; box-shadow: 0 2px 8px rgba(17,24,39,.06); }
@@ -911,4 +1292,273 @@ html, body, #root { overflow-x: hidden; }
 .file-badge-audio { background: #0ea5e9; }
 .file-badge-video { background: #1d4ed8; }
 .file-badge-file { background: #6b7280; }
+
+/* FullCalendar v6 (Bootstrap theme) - brand-aligned styling */
+.fc { color: #111827; }
+.fc .fc-toolbar {
+  background: transparent;
+  border-bottom: 1px solid #e6ebf3;
+  position: relative;
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 0;
+  padding: 8px 12px;
+  flex-direction: row !important;
+  min-height: 48px;
+}
+.fc .fc-toolbar > * {
+  display: flex !important;
+  align-items: center !important;
+  flex-shrink: 0;
+  margin: 0;
+  white-space: nowrap;
+  height: 100%;
+}
+.fc .fc-toolbar-chunk {
+  display: flex !important;
+  align-items: center !important;
+  flex-shrink: 0;
+  margin: 0;
+  white-space: nowrap;
+  height: 100%;
+}
+/* Calendar view selector - 'Thêm lịch' + dropdown Tháng/Tuần/Ngày trên cùng một hàng, nằm bên phải header */
+.calendar-view-selector {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.calendar-view-selector .ant-select {
+  margin: 0;
+}
+.calendar-view-selector .ant-select-selector {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 4px 11px;
+  line-height: 1.5715;
+  border-radius: 8px;
+}
+.fc .fc-toolbar-chunk {
+  display: flex;
+  align-items: center;
+}
+.fc .fc-toolbar-title {
+  color: var(--color-secondary);
+  font-weight: 800;
+}
+.fc a { color: var(--color-secondary); text-decoration: none; }
+.fc a:hover { color: var(--color-secondary); text-decoration: underline; }
+
+/* Scope button look inside calendar only */
+.fc .btn { border-radius: 10px; }
+.fc .btn-primary,
+.fc .fc-button-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #111827;
+  font-weight: 700;
+}
+.fc .btn-primary:hover,
+.fc .fc-button-primary:hover { filter: brightness(0.96); }
+.fc .btn-light,
+.fc .btn-outline-secondary,
+.fc .fc-button {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  color: #111827;
+  transition: all 0.2s ease;
+}
+.fc .btn-light:hover,
+.fc .btn-outline-secondary:hover,
+.fc .fc-button:hover {
+  background: #fff7ea;
+  border-color: #f59e0b;
+  color: #7c2d12;
+}
+.fc .fc-button-active,
+.fc .fc-button-active:hover {
+  background: var(--color-secondary);
+  border-color: var(--color-secondary);
+  color: #fff;
+}
+
+/* Grid + headers */
+.fc .fc-scrollgrid,
+.fc .fc-view-harness,
+.fc .fc-col-header,
+.fc .fc-col-header-cell,
+.fc .fc-daygrid,
+.fc .fc-daygrid-day,
+.fc .fc-daygrid-day-frame,
+.fc .fc-timegrid,
+.fc .fc-timegrid-slot,
+.fc .fc-timegrid-divider {
+  background: #ffffff;
+}
+.fc .fc-col-header-cell-cushion,
+.fc .fc-daygrid-day-number { color: #111827; }
+.fc .fc-col-header-cell-cushion { font-weight: 800; }
+.fc .fc-day-today .fc-col-header-cell-cushion {
+  background: var(--color-secondary);
+  color: #fff;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+.fc .fc-day-today { background: rgba(245,158,11,0.10) !important; }
+.fc .fc-highlight { background: rgba(245,158,11,0.16); }
+.fc .fc-timegrid-slot { border-color: #eef2f7; }
+
+/* Clear grid lines separating days and hours */
+.fc .fc-theme-standard td,
+.fc .fc-theme-standard th { border-color: #e6ebf3; }
+.fc .fc-col-header,
+.fc .fc-daygrid,
+.fc .fc-timegrid { border-color: #e6ebf3; }
+.fc .fc-col-header-cell,
+.fc .fc-daygrid-day { border-right: 1px solid #e6ebf3; }
+.fc .fc-col-header-cell:last-child,
+.fc .fc-daygrid-day:last-child { border-right: none; }
+.fc .fc-timegrid .fc-timegrid-col { border-right: 1px solid #e6ebf3; }
+.fc .fc-timegrid .fc-timegrid-col:last-child { border-right: none; }
+.fc .fc-timegrid-slot { border-bottom: 1px solid #eef2f7; }
+
+/* Enforce vertical separators in Week (timeGrid) view */
+.fc .fc-timegrid-axis { border-right: 1px solid #dbe5ef; } /* line after hours column */
+
+/* Strong separators using pseudo-elements (works across themes) */
+.fc .fc-timegrid-col-frame { position: relative; }
+.fc .fc-timegrid-col-frame::after {
+  content: '';
+  position: absolute;
+  right: -0.5px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #dbe5ef;
+  z-index: 5;
+  pointer-events: none;
+}
+.fc .fc-col-header-cell { position: relative; }
+.fc .fc-col-header-cell:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #dbe5ef;
+  pointer-events: none;
+}
+
+/* Background grid columns (most reliable layer for vertical lines) */
+.fc .fc-timegrid-bg .fc-timegrid-bg-col { border-right: 1px solid #dbe5ef; }
+.fc .fc-timegrid-bg tr > td:last-child { border-right: none; }
+
+/* Events - use color from event data */
+.fc .fc-event,
+.fc .fc-daygrid-event {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  font-weight: 700;
+}
+
+.fc .fc-daygrid-event[style*="background-color: rgb(255, 255, 255)"],
+.fc .fc-daygrid-event[style*="background-color:#ffffff"] {
+  color: #111827 !important; 
+}
+.fc .fc-daygrid-event[style*="background-color: rgb(255, 255, 255)"] .fc-event-main,
+.fc .fc-daygrid-event[style*="background-color:#ffffff"] .fc-event-main {
+  color: #111827 !important;
+}
+
+/* TimeGrid (week/day) events keep white text on colored background */
+.fc .fc-timegrid-event { color: #fff; }
+
+/* Current time indicator like Google Calendar */
+.fc .fc-timegrid-now-indicator-line { border-top-color: #ef4444; }
+.fc .fc-timegrid-now-indicator-arrow { border-color: #ef4444; }
+
+/* Week view header with stacked dow+date like Google */
+.fc-dayhead { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; }
+.fc-dow { font-weight: 700; color: #64748b; letter-spacing: 0.3px; font-size: 12px; }
+.fc-date { font-weight: 800; font-size: 16px; color: #111827; padding: 4px 10px; border-radius: 999px; line-height: 1; }
+.fc-date.today { background: var(--color-secondary); color: #fff; box-shadow: 0 6px 16px rgba(31,59,91,0.25); }
+
+/* Reduce overall calendar font sizes */
+.fc { font-size: 13px; }
+.fc .fc-toolbar-title { font-size: 18px !important; font-weight: 700; }
+.fc .fc-col-header-cell-cushion { font-size: 12px; }
+.fc .fc-daygrid-day-number { font-size: 13px; }
+.fc .fc-timegrid-axis-cushion { font-size: 11px; color: #94a3b8; font-weight: 600; }
+.fc .fc-event-title { font-size: 12px; }
+.fc .fc-event-time { font-size: 11px; }
+
+/* Timegrid event - use color from event data, fallback to blue */
+.fc .fc-timegrid-event { border-radius: 12px; box-shadow: 0 8px 18px rgba(0,0,0,0.12); color: #fff; }
+.fc .fc-timegrid-event:hover { filter: brightness(1.02); box-shadow: 0 10px 22px rgba(0,0,0,0.18); }
+
+/* Completed deadline styling - strikethrough and gray */
+.fc .deadline-completed .fc-event-title,
+.fc .deadline-completed .fc-event-title-container {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.fc .deadline-completed.fc-daygrid-event .fc-event-title {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* Custom layout: tiêu đề trên, giờ dưới cho event thường */
+.fc-event-inner-custom {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.fc-event-title-main {
+  font-weight: 700;
+}
+.fc-event-time-sub {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+/* Deadline quick actions inside calendar event */
+.fc-deadline-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+.fc-deadline-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fc-deadline-check {
+  border: none;
+  outline: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.18);
+  color: #fefce8;
+  cursor: pointer;
+  padding: 0;
+}
+.fc-deadline-check .anticon {
+  font-size: 12px;
+}
+.fc-deadline-check.is-completed {
+  background: rgba(34,197,94,0.18);
+  color: #bbf7d0;
+}
 

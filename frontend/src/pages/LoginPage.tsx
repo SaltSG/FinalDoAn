@@ -1,7 +1,7 @@
 import { Button, Card, Form, Input, Space, Typography, message } from 'antd';
 import { GoogleOutlined, MailOutlined, LockOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState } from 'react';
-import { authUserFromGoogleCredential, getAuthUser, setAuthUser, setAuthToken } from '../services/auth';
+import { authUserFromGoogleCredential, getAuthUser, setAuthUser, setAuthToken, type AuthUser } from '../services/auth';
 import { useNavigate } from 'react-router-dom';
 
 export default function LoginPage() {
@@ -19,6 +19,11 @@ export default function LoginPage() {
       document.body.appendChild(s);
     }
   }, []);
+
+  const goAfterLogin = (user: AuthUser | null | undefined) => {
+    if (user?.role === 'admin') navigate('/admin');
+    else navigate('/');
+  };
 
   function resolveApiBase(): string {
     const env: any = (import.meta as any).env;
@@ -53,10 +58,10 @@ export default function LoginPage() {
           use_fedcm_for_prompt: false,
           callback: async (resp: any) => {
             try {
-      const rs = await postJson('/api/auth/google', { credential: resp.credential });
-      if (rs && rs.user) setAuthUser(rs.user);
-      if (rs && rs.token) setAuthToken(rs.token);
-      navigate(rs?.user?.role === 'admin' ? '/admin' : '/');
+              const rs = await postJson('/api/auth/google', { credential: resp.credential });
+              if (rs && rs.user) setAuthUser(rs.user);
+              if (rs && rs.token) setAuthToken(rs.token);
+              goAfterLogin(rs?.user as AuthUser | undefined);
             } catch (e: any) {
               try {
                 const json = JSON.parse(e?.message || '{}');
@@ -83,7 +88,7 @@ export default function LoginPage() {
       const rs = await postJson(path, payload);
       if (rs && rs.user) setAuthUser(rs.user);
       if (rs && rs.token) setAuthToken(rs.token);
-      navigate(rs?.user?.role === 'admin' ? '/admin' : '/');
+      goAfterLogin(rs?.user as AuthUser | undefined);
     } catch (e: any) {
       message.error(mode === 'login' ? 'Sai email hoặc mật khẩu' : 'Đăng ký thất bại (email có thể đã tồn tại)');
     }

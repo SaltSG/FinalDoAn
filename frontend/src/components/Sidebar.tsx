@@ -1,5 +1,5 @@
 import { Layout, Menu } from 'antd';
-import { HomeOutlined, ClockCircleOutlined, BarChartOutlined, OrderedListOutlined, DashboardOutlined, UserOutlined, BookOutlined } from '@ant-design/icons';
+import { HomeOutlined, ClockCircleOutlined, BarChartOutlined, OrderedListOutlined, CalendarOutlined, CrownOutlined, UserOutlined, BookOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getAuthUser } from '../services/auth';
 
@@ -14,16 +14,13 @@ export default function Sidebar({ collapsed, onCollapse, logoSrc }: SidebarProps
   const navigate = useNavigate();
   const user = getAuthUser();
   const isAdmin = user?.role === 'admin';
-  
-  // Admin only sees admin menu
+
   const selectedKeys = isAdmin
     ? location.pathname.startsWith('/admin/users')
       ? ['admin-users']
       : location.pathname.startsWith('/admin/curriculum')
       ? ['admin-curriculum']
-      : location.pathname.startsWith('/admin')
-      ? ['admin']
-      : ['admin']
+      : ['admin-dashboard']
     : location.pathname.startsWith('/summary')
     ? ['summary']
     : location.pathname.startsWith('/results')
@@ -32,24 +29,19 @@ export default function Sidebar({ collapsed, onCollapse, logoSrc }: SidebarProps
     ? ['progress']
     : location.pathname.startsWith('/deadline')
     ? ['deadline']
+    : location.pathname.startsWith('/calendar')
+    ? ['calendar']
     : ['home'];
 
-  // Menu items: Admin only sees admin menu, regular users see normal menu
   const items = isAdmin
     ? [
-        {
-          key: 'admin',
-          icon: <DashboardOutlined />,
-          label: 'Quản trị',
-          children: [
-            { key: 'admin', label: 'Bảng điều khiển' },
-            { key: 'admin-users', label: 'Người dùng' },
-            { key: 'admin-curriculum', label: 'Chương trình học' },
-          ],
-        },
+        { key: 'admin-dashboard', icon: <CrownOutlined />, label: 'Dashboard' } as const,
+        { key: 'admin-users', icon: <UserOutlined />, label: 'Người dùng' } as const,
+        { key: 'admin-curriculum', icon: <BookOutlined />, label: 'Chương trình học' } as const,
       ]
     : [
         { key: 'home', icon: <HomeOutlined />, label: 'Trang chủ' },
+        { key: 'calendar', icon: <CalendarOutlined />, label: 'Lịch' },
         { key: 'deadline', icon: <ClockCircleOutlined />, label: 'Deadline' },
         { key: 'progress', icon: <BarChartOutlined />, label: 'Tiến trình' },
         {
@@ -78,16 +70,17 @@ export default function Sidebar({ collapsed, onCollapse, logoSrc }: SidebarProps
       <Menu
         mode="inline"
         selectedKeys={selectedKeys}
-        defaultOpenKeys={isAdmin ? ["admin"] : ["study"]}
+        defaultOpenKeys={isAdmin ? [] : ['study']}
         items={items}
         onClick={(e) => {
           const key = e.key;
           if (key === 'home') navigate('/');
+          else if (key === 'calendar') navigate('/calendar');
           else if (key === 'deadline') navigate('/deadline');
           else if (key === 'progress') navigate('/progress');
           else if (key === 'results') navigate('/results');
           else if (key === 'summary') navigate('/summary');
-          else if (key === 'admin') navigate('/admin');
+          else if (key === 'admin-dashboard') navigate('/admin');
           else if (key === 'admin-users') navigate('/admin/users');
           else if (key === 'admin-curriculum') navigate('/admin/curriculum');
         }}

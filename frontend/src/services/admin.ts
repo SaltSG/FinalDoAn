@@ -1,205 +1,86 @@
-const API_BASE = '';
+import { getAuthToken } from './auth';
 
-async function getJson(path: string) {
-  const token = localStorage.getItem('auth.token');
-  const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  const res = await fetch(`${API_BASE}${path}`, { headers, credentials: 'same-origin' });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function putJson(path: string, body: any) {
-  const token = localStorage.getItem('auth.token');
-  const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify(body),
-    credentials: 'same-origin',
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function deleteJson(path: string) {
-  const token = localStorage.getItem('auth.token');
-  const headers: HeadersInit = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'DELETE',
-    headers,
-    credentials: 'same-origin',
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function postJson(path: string, body: any) {
-  const token = localStorage.getItem('auth.token');
-  const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    credentials: 'same-origin',
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-export type AdminStats = {
-  users: {
-    total: number;
-    admins: number;
-    students: number;
-    local: number;
-    google: number;
-    recent: number;
-  };
-  deadlines: {
-    total: number;
-    completed: number;
-    ongoing: number;
-    overdue: number;
-  };
-  curriculum: {
-    dev: {
-      exists: boolean;
-      students: number;
-    };
-    design: {
-      exists: boolean;
-      students: number;
-    };
-  };
-  chat: {
-    totalMessages: number;
-  };
-  results: {
-    total: number;
-  };
-};
-
-export type User = {
-  _id: string;
+export type AdminUser = {
+  id: string;
   email: string;
   name: string;
-  role: 'user' | 'admin';
   provider: 'local' | 'google';
   picture?: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type UserWithStats = {
-  user: User;
-  stats: {
-    hasResults: boolean;
-    deadlinesCount: number;
-    messagesCount: number;
-    specialization?: 'dev' | 'design';
-  };
-};
-
-export type Deadline = {
-  _id: string;
-  user: {
-    _id: string;
-    name: string;
-    email: string;
-  };
-  title: string;
-  startAt?: string;
-  endAt?: string;
-  note?: string;
-  status: 'upcoming' | 'ongoing' | 'overdue' | 'completed';
-  createdAt: string;
-  updatedAt: string;
-};
-
-export async function getAdminStats(): Promise<AdminStats> {
-  return getJson('/api/admin/stats');
-}
-
-export async function listUsers(params?: {
-  page?: number;
-  limit?: number;
-  search?: string;
   role?: 'user' | 'admin';
-}): Promise<{
-  data: User[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
+  status?: 'active' | 'locked';
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type AdminUserStatsPoint = {
+  date: string;       // yyyy-MM-dd
+  newUsers: number;
+  totalUsers: number;
+};
+
+export type AdminUserStats = {
+  totalUsers: number;
+  activeLast7Days: number;
+  daily: AdminUserStatsPoint[];
+};
+
+async function authFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const token = getAuthToken();
+  const headers = new Headers(init.headers || {});
+  headers.set('Content-Type', 'application/json');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+}
+
+export async function fetchAdminUsers(): Promise<AdminUser[]> {
+  const res = await authFetch('/api/admin/users');
+  if (!res.ok) throw new Error('Không tải được danh sách người dùng');
+  const data = await res.json();
+  return (data.users ?? []) as AdminUser[];
+}
+
+export async function fetchAdminUserStats(): Promise<AdminUserStats> {
+  const res = await authFetch('/api/admin/stats/users');
+  if (!res.ok) throw new Error('Không tải được thống kê người dùng');
+  const data = await res.json();
+  return {
+    totalUsers: data.totalUsers ?? 0,
+    activeLast7Days: data.activeLast7Days ?? 0,
+    daily: Array.isArray(data.daily)
+      ? (data.daily as any[]).map((d) => ({
+          date: String(d.date),
+          newUsers: Number(d.newUsers ?? 0),
+          totalUsers: Number(d.totalUsers ?? 0),
+        }))
+      : [],
   };
-}> {
-  const query = new URLSearchParams();
-  if (params?.page) query.set('page', String(params.page));
-  if (params?.limit) query.set('limit', String(params.limit));
-  if (params?.search) query.set('search', params.search);
-  if (params?.role) query.set('role', params.role);
-  return getJson(`/api/admin/users?${query.toString()}`);
 }
 
-export async function getUser(id: string): Promise<UserWithStats> {
-  return getJson(`/api/admin/users/${id}`);
+export async function updateAdminUser(
+  id: string,
+  payload: Partial<Pick<AdminUser, 'role' | 'status'>>
+): Promise<AdminUser> {
+  const res = await authFetch(`/api/admin/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    // ignore
+  }
+  if (!res.ok) {
+    const code = data?.message;
+    if (code === 'cannot_lock_self') {
+      throw new Error('Không thể khóa tài khoản của chính bạn.');
+    }
+    if (code === 'user_not_found') {
+      throw new Error('Không tìm thấy người dùng.');
+    }
+    throw new Error('Cập nhật người dùng thất bại');
+  }
+  return (data?.user ?? null) as AdminUser;
 }
 
-export async function updateUser(id: string, data: {
-  name?: string;
-  role?: 'user' | 'admin';
-  email?: string;
-}): Promise<{ ok: boolean; user: User }> {
-  return putJson(`/api/admin/users/${id}`, data);
-}
-
-export async function deleteUser(id: string): Promise<{ ok: boolean }> {
-  return deleteJson(`/api/admin/users/${id}`);
-}
-
-export async function getAllDeadlines(params?: {
-  page?: number;
-  limit?: number;
-  status?: 'upcoming' | 'ongoing' | 'overdue' | 'completed';
-}): Promise<{
-  data: Deadline[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
-}> {
-  const query = new URLSearchParams();
-  if (params?.page) query.set('page', String(params.page));
-  if (params?.limit) query.set('limit', String(params.limit));
-  if (params?.status) query.set('status', params.status);
-  return getJson(`/api/admin/deadlines?${query.toString()}`);
-}
-
-export async function getChatStats(): Promise<{
-  total: number;
-  withAttachments: number;
-  rooms: Array<{
-    _id: string;
-    count: number;
-    withAttachments: number;
-  }>;
-  recent: Array<any>;
-}> {
-  return getJson('/api/admin/chat/stats');
-}
 

@@ -121,4 +121,9 @@ export function resolveFileUrl(url: string): string {
   return `${API_BASE}${url}`;
 }
 
+export async function fetchAttachments(room: string, type: 'image' | 'video' | 'file'): Promise<ChatMessageDto[]> {
+  const rs = await getJson(`/api/chat/attachments?room=${encodeURIComponent(room)}&type=${encodeURIComponent(type)}`);
+  return (rs?.data as ChatMessageDto[]) || [];
+}
+
 

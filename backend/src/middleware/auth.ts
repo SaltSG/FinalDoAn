@@ -1,7 +1,13 @@
 import { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 
-type JwtClaims = { id: string; name?: string; email?: string; role?: string };
+type JwtClaims = {
+  id: string;
+  name?: string;
+  email?: string;
+  role?: 'user' | 'admin';
+  status?: 'active' | 'locked';
+};
 
 export const requireAuth: RequestHandler = (req, res, next) => {
   try {
@@ -11,7 +17,17 @@ export const requireAuth: RequestHandler = (req, res, next) => {
     const secret = process.env.JWT_SECRET || 'dev_secret_change_me';
     const decoded = jwt.verify(String(token), secret) as JwtClaims;
     if (!decoded?.id) return res.status(401).json({ message: 'unauthorized' });
-    (req as any).user = { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role };
+    const user = {
+      id: decoded.id,
+      name: decoded.name,
+      email: decoded.email,
+      role: decoded.role ?? 'user',
+      status: decoded.status ?? 'active',
+    };
+    if (user.status === 'locked') {
+      return res.status(403).json({ message: 'account_locked' });
+    }
+    (req as any).user = user;
     next();
   } catch {
     return res.status(401).json({ message: 'unauthorized' });
@@ -19,13 +35,9 @@ export const requireAuth: RequestHandler = (req, res, next) => {
 };
 
 export const requireAdmin: RequestHandler = (req, res, next) => {
-  requireAuth(req, res, () => {
-    const user = (req as any).user;
-    if (!user || user.role !== 'admin') {
-      return res.status(403).json({ message: 'forbidden' });
-    }
-    next();
-  });
+  const user = (req as any).user as { role?: string } | undefined;
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ message: 'forbidden' });
+  }
+  next();
 };
-
-

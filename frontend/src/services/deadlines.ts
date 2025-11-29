@@ -3,9 +3,13 @@ export type DeadlineStatus = 'upcoming' | 'ongoing' | 'overdue' | 'completed';
 export type DeadlineDto = {
   _id: string;
   title: string;
+  /** Mã môn học (nếu deadline/lịch thi gắn với một môn cụ thể) */
+  courseCode?: string;
   startAt?: string | null;
   endAt?: string | null;
   note?: string;
+  /** Đánh dấu đây là lịch thi (exam schedule) */
+  isExam?: boolean;
   status: DeadlineStatus;
   createdAt: string;
   updatedAt: string;
