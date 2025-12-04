@@ -32,9 +32,14 @@ export async function saveSpecialization(userId: string, specialization: 'dev' |
   await putJson(`/api/results`, { userId, specialization });
 }
 
-export async function fetchResultsMeta(userId: string): Promise<{ data: OverrideData; specialization?: 'dev' | 'design'; stats?: any }>{
+export async function fetchResultsMeta(userId: string): Promise<{ data: OverrideData; specialization?: 'dev' | 'design'; stats?: any; currentStudySem?: string }>{
   const rs = await getJson(`/api/results?userId=${encodeURIComponent(userId)}`);
-  return { data: (rs?.data as OverrideData) || {}, specialization: rs?.specialization as any, stats: rs?.stats };
+  return {
+    data: (rs?.data as OverrideData) || {},
+    specialization: rs?.specialization as any,
+    stats: rs?.stats,
+    currentStudySem: rs?.currentStudySem as string | undefined,
+  };
 }
 
 

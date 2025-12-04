@@ -153,6 +153,11 @@ export default function ProgressPage() {
         setSpecialization(meta.specialization);
         try { localStorage.setItem('specialization', meta.specialization); } catch {}
       }
+      if (meta.currentStudySem && /^HK\d+$/i.test(meta.currentStudySem)) {
+        setCurrentStudySem(meta.currentStudySem as SemesterKey);
+        setSemester(meta.currentStudySem as SemesterKey);
+        try { localStorage.setItem('currentStudySem', meta.currentStudySem); } catch {}
+      }
     }).catch(() => {});
   }, []);
 
@@ -438,6 +443,17 @@ export default function ProgressPage() {
                 }
                 window.dispatchEvent(new Event('current-study-sem-changed'));
               } catch {/* ignore */}
+
+              // Lưu kỳ học hiện tại lên backend để chatbot và các phần khác dùng được
+              const u = getAuthUser();
+              if (u?.id) {
+                // Gửi kỳ học hiện tại lên backend (không đụng tới dữ liệu điểm)
+                fetch('/api/results', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: u.id, currentStudySem: val ?? null }),
+                }).catch(() => {});
+              }
             }}
             options={semesters.map((s) => ({ value: s.value as SemesterKey, label: `Kỳ học hiện tại: ${s.value}` }))}
           />

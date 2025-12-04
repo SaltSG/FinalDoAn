@@ -13,6 +13,7 @@ export interface IUserResults extends Document {
   semGpa4?: Record<string, number>;
   cumGpa4?: Record<string, number>;
   specialization?: 'dev' | 'design';
+  currentStudySem?: string;
 }
 
 const UserResultsSchema = new Schema<IUserResults>({
@@ -21,6 +22,7 @@ const UserResultsSchema = new Schema<IUserResults>({
   semGpa4: { type: Schema.Types.Mixed, default: {} },
   cumGpa4: { type: Schema.Types.Mixed, default: {} },
   specialization: { type: String, enum: ['dev', 'design'], default: undefined },
+  currentStudySem: { type: String, default: undefined },
 }, { timestamps: true });
 
 export const UserResults: Model<IUserResults> = mongoose.models.UserResults || mongoose.model<IUserResults>('UserResults', UserResultsSchema);

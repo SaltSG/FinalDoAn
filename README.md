@@ -29,22 +29,39 @@ npm run dev
 ### Cấu trúc thư mục
 ```
 .
-├─ frontend/      # Ứng dụng React
+├─ frontend/              # Ứng dụng React cho sinh viên
 │  └─ src/
-│     ├─ pages/
-│     ├─ components/
+│     ├─ pages/           # Các trang: Dashboard, Progress, Results, Calendar, Chatbot, Summary, ...
+│     ├─ components/      # Navbar, Sidebar, ChatbotWidget, ChatWidget, NotificationBell, ...
 │     ├─ hooks/
-│     └─ services/
-├─ backend/       # API Express
+│     ├─ services/        # Gọi API: auth, results, curriculum, deadlines, events realtime, ...
+│     ├─ lib/             # Hàm tiện ích (ví dụ: grading)
+│     └─ types/
+├─ admin/                 # Ứng dụng React cho trang quản trị
 │  └─ src/
-│     ├─ routes/
-│     ├─ models/
-│     └─ controllers/
-├─ .github/       # CI workflow
+│     ├─ App.tsx
+│     ├─ main.tsx
+│     └─ services/        # Gọi API cho phần admin
+├─ backend/               # API Express + Socket.io
+│  └─ src/
+│     ├─ config/          # Kết nối DB, Redis
+│     ├─ controllers/     # Xử lý nghiệp vụ: auth, results, curriculum, deadlines, chat, chatbot context, ...
+│     ├─ models/          # Mongoose models: User, UserResults, Curriculum, Deadline, ChatMessage, ...
+│     ├─ routes/          # Định nghĩa routing: /auth, /results, /curriculum, /deadlines, /chat, /chatbot, ...
+│     ├─ realtime/        # Khởi tạo Socket.io server
+│     ├─ middleware/      # auth middleware, ...
+│     ├─ utils/           # Tiện ích (upload, ...)
+│     └─ index.ts         # Điểm vào của backend
+├─ ml/                    # ML / Chatbot service (Python + FastAPI)
+│  ├─ app.py              # FastAPI app, expose /chat
+│  ├─ services/           # logic chatbot, intent, data_client, llm_client, ...
+│  ├─ scripts/            # Train model demo (intent, GPA)
+│  └─ models/             # Model đã train (.pkl)
+├─ backend/uploads/       # File upload (ảnh, tài liệu) lưu tạm thời
 ├─ .editorconfig
 ├─ .gitignore
 ├─ .prettierrc.json
-├─ package.json   # Workspaces + scripts
+├─ package.json           # Workspaces + scripts
 └─ README.md
 ```
 

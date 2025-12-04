@@ -508,6 +508,9 @@ def _answer_semester_gpa(message: str, user_id: str) -> str:
 
     stats_ctx = ctx.get("stats") or {}
     sem_gpa4 = stats_ctx.get("semGpa4") or {}
+
+    # Nếu backend có truyền kỳ học hiện tại (do người dùng chọn trên Tiến trình), ưu tiên sử dụng nó
+    current_study_sem = str(ctx.get("currentStudySem") or "").strip() or None
     if not isinstance(sem_gpa4, dict) or not sem_gpa4:
         return "Hiện chưa có dữ liệu GPA theo từng học kỳ của bạn."
 
@@ -663,7 +666,7 @@ def _answer_credits(user_id: str) -> str:
 
 
 def _answer_graduation(user_id: str) -> str:
-    """Đánh giá khả năng ra trường đúng hạn."""
+    """Đánh giá khả năng ra trường đúng hạn theo hướng "cố vấn học tập" hơn."""
     ctx = fetch_full_context(user_id)
     if not ctx:
         return "Không thể lấy dữ liệu đầy đủ để ước lượng khả năng ra trường của bạn."
@@ -675,13 +678,16 @@ def _answer_graduation(user_id: str) -> str:
     total_credits_passed = stats.get("total_credits_passed", 0)
     required_credits = stats.get("required_credits", 0)
     debt_courses = stats.get("debt_courses", [])
-    
+
     if gpa10 is None or required_credits == 0:
         return stats.get("error", "Không thể ước lượng: Thiếu thông tin về GPA hoặc tổng tín chỉ yêu cầu.")
-    
+
     # Lấy GPA hệ 4 từ backend hoặc chuyển đổi từ hệ 10
     stats_ctx = ctx.get("stats") or {}
     cum_gpa4 = stats_ctx.get("cumGpa4") or {}
+
+    # Nếu backend có truyền kỳ học hiện tại (do người dùng chọn trên Tiến trình), ưu tiên sử dụng nó
+    current_study_sem = str(ctx.get("currentStudySem") or "").strip() or None
     gpa4: Optional[float] = None
     if isinstance(cum_gpa4, dict) and cum_gpa4:
         # Lấy kỳ mới nhất
@@ -695,79 +701,228 @@ def _answer_graduation(user_id: str) -> str:
                 gpa4 = float(cum_gpa4[last_key])
             except Exception:
                 gpa4 = None
-    
+
     # Nếu không có GPA hệ 4 từ backend, chuyển đổi từ hệ 10
     if gpa4 is None:
         gpa4 = four_from_10(gpa10)
-    
+
     # Giả định: Tốt nghiệp yêu cầu GPA >= 2.0 (hệ 4) và đủ tín chỉ
     MIN_GPA4 = 2.0
-    
-    # 1. Kiểm tra GPA
-    gpa_status = ""
+
+    # 1. Kiểm tra GPA và mức rủi ro GPA
     if gpa4 < MIN_GPA4:
-        gpa_status = f"GPA tích lũy hiện tại của bạn là **{gpa4:.2f}** (hệ 4), đang **thấp hơn** mức tối thiểu **{MIN_GPA4:.2f}**."
+        gpa_status = f"GPA tích lũy hiện tại của bạn khoảng {gpa4:.2f}/4.0, đang thấp hơn chuẩn tối thiểu {MIN_GPA4:.2f}."
+        gpa_risk = 2
+    elif gpa4 < 2.3:
+        gpa_status = (
+            f"GPA tích lũy hiện tại của bạn khoảng {gpa4:.2f}/4.0, hơi sát ngưỡng tối thiểu "
+            "nên bạn cần cẩn thận hơn trong các kỳ tới."
+        )
+        gpa_risk = 1
     else:
-        gpa_status = f"GPA tích lũy hiện tại là **{gpa4:.2f}** (hệ 4), đã **đạt** yêu cầu tối thiểu **{MIN_GPA4:.2f}**."
+        gpa_status = f"GPA tích lũy hiện tại của bạn khoảng {gpa4:.2f}/4.0, khá an toàn so với ngưỡng tối thiểu."
+        gpa_risk = 0
 
     # 2. Kiểm tra Tín chỉ
     remaining_credits = required_credits - total_credits_passed
-    
+
     if remaining_credits > 0:
-        credits_status = f"Bạn còn thiếu **{remaining_credits}** tín chỉ nữa (đã tích lũy {total_credits_passed}/{required_credits})."
+        credits_status = (
+            f"Bạn đã tích lũy {total_credits_passed}/{required_credits} tín chỉ. "
+            f"Nghĩa là còn thiếu khoảng {remaining_credits} tín chỉ nữa so với yêu cầu tốt nghiệp."
+        )
     else:
-        credits_status = "Bạn đã tích lũy **đủ** số tín chỉ yêu cầu. Chúc mừng!"
+        credits_status = (
+            f"Bạn đã tích lũy {total_credits_passed}/{required_credits} tín chỉ, "
+            "tức là đã đủ số tín chỉ tối thiểu theo chương trình."
+        )
 
     # 3. Kiểm tra Môn nợ
     debt_credits = sum(c["credit"] for c in debt_courses)
-    debt_status = f"Bạn đang nợ **{len(debt_courses)}** môn ({debt_credits} tín chỉ)." if debt_courses else "Bạn **không** nợ môn nào cần học lại."
 
-    # 4. Đánh giá chung về khả năng ra trường
-    
-    # Số tín chỉ trung bình mỗi học kỳ (Giả định 8 học kỳ chính)
-    SEMESTERS = 8 # Ví dụ: 4 năm, 2 kỳ/năm
-    avg_credits_per_sem = required_credits / SEMESTERS
-    
-    # Ước lượng học kỳ đã qua (thô) - Dùng số tín chỉ GPA đã học
-    # Giả định sinh viên đi đúng tiến độ
-    estimated_semesters_passed = total_gpa_credits / avg_credits_per_sem if avg_credits_per_sem > 0 else 0
-    current_semester_estimate = int(estimated_semesters_passed) + 1
-    
-    # Logic đánh giá
-    # Đơn giản hoá thành 3 mức: CAO / TRUNG BÌNH / THẤP
-    if remaining_credits <= 0 and gpa4 >= MIN_GPA4 and not debt_courses:
-        # Đã đủ tín chỉ, đủ GPA, không nợ môn
-        final_assessment = (
-            "**Khả năng Tốt nghiệp Đúng hạn: CAO.** Bạn đã đủ tín chỉ, đủ GPA và không nợ môn. "
-            "Hãy duy trì thành tích!"
-        )
-    elif remaining_credits > 0 and current_semester_estimate >= SEMESTERS and (gpa4 < MIN_GPA4 or debt_credits > 0):
-        # Đang ở gần/đúng kỳ cuối mà vẫn thiếu tín chỉ hoặc còn nhiều môn nợ/GPA thấp
-        final_assessment = (
-            "**Khả năng Tốt nghiệp Đúng hạn: THẤP.** "
-            f"Bạn đang ở khoảng học kỳ {current_semester_estimate} và vẫn còn thiếu "
-            f"**{remaining_credits}** tín chỉ hoặc còn môn chưa đạt. "
-            "Bạn nhiều khả năng phải học thêm kỳ phụ hoặc kéo dài thời gian học."
+    if debt_courses:
+        debt_status = (
+            f"Bạn đang nợ {len(debt_courses)} môn với tổng khoảng {debt_credits} tín chỉ "
+            "(cần học lại/thi lại để được công nhận)."
         )
     else:
-        # Các trường hợp còn lại (ví dụ còn 1–vài môn nợ hoặc GPA chưa cao nhưng vẫn còn nhiều kỳ)
-        final_assessment = (
-            "**Khả năng Tốt nghiệp Đúng hạn: TRUNG BÌNH/KHẢ QUAN.** "
-            f"Bạn còn **{remaining_credits}** tín chỉ cần tích lũy và hiện đang nợ {len(debt_courses)} môn "
-            f"({debt_credits} tín chỉ). Nếu bạn học lại môn chưa đạt và duy trì điểm số tốt hơn "
-            "trong các học kỳ tới, bạn vẫn có thể ra trường đúng hạn."
-        )
+        debt_status = "Hiện tại bạn không có môn nào bị trượt phải học lại, đây là một lợi thế lớn cho tiến độ tốt nghiệp."
 
-    # Tổng hợp câu trả lời
-    reply = (
-        f"**Đánh giá Khả năng Tốt nghiệp Đúng hạn (Dựa trên dữ liệu hiện tại):**\n\n"
-        f"1. **Tín chỉ Tích lũy:** {total_credits_passed}/{required_credits} TC. ({credits_status})\n"
-        f"2. **Điểm GPA:** {gpa_status}\n"
-        f"3. **Môn học lại (Nợ):** {debt_status}\n\n"
-        f"{final_assessment}"
+    # Rủi ro nợ môn theo trọng số tín chỉ (vừa mô tả, vừa cho điểm rủi ro)
+    if debt_credits == 0:
+        debt_risk_text = "rất thấp"
+        debt_risk = 0
+    elif debt_credits <= 4:
+        debt_risk_text = "thấp"
+        debt_risk = 1
+    elif debt_credits <= 10:
+        debt_risk_text = "trung bình"
+        debt_risk = 2
+    else:
+        debt_risk_text = "cao"
+        debt_risk = 3
+
+    # 4. Đánh giá tiến độ theo thời gian / số học kỳ dựa trên dữ liệu thực tế
+    # Giả định khung chương trình chuẩn: 8 học kỳ chính (4 năm, 2 kỳ/năm)
+    SEMESTERS = 8
+
+    stats_ctx = ctx.get("stats") or {}
+    sem_gpa4 = stats_ctx.get("semGpa4") or {}
+
+    # Số học kỳ đã thực sự học có tích lũy tín chỉ (dựa trên dữ liệu điểm từng kỳ),
+    # tránh trường hợp backend tạo sẵn nhiều key HK nhưng chưa có tín chỉ -> làm lệch tốc độ học/kỳ.
+    results_data = ctx.get("results") or {}
+    curriculum = ctx.get("curriculum") or {}
+
+    # Map môn học theo code để biết số tín chỉ & có tính vào tín chỉ không
+    course_map: Dict[str, Dict[str, Any]] = {}
+    for sem in curriculum.get("semesters", []):
+        for course in sem.get("courses", []):
+            code = course.get("code", "")
+            if code:
+                course_map[code] = course
+
+    credits_per_sem: Dict[str, float] = {}
+    for sem_key, sem_results in results_data.items():
+        passed_credits_this_sem = 0.0
+        for code, result in sem_results.items():
+            course_info = course_map.get(code) or {}
+            if not course_info.get("countInCredits", False):
+                continue
+            credit = float(course_info.get("credit") or 0)
+            status = str(result.get("status", "") or "").lower()
+            if status == "passed" and credit > 0:
+                passed_credits_this_sem += credit
+        if passed_credits_this_sem > 0:
+            credits_per_sem[str(sem_key)] = passed_credits_this_sem
+
+    if credits_per_sem:
+        # Chỉ tính các học kỳ mà sinh viên thực sự có tín chỉ đã qua
+        semesters_passed = len(credits_per_sem)
+    else:
+        # Fallback: nếu chưa tách được theo học kỳ thì ước lượng từ GPA
+        if isinstance(sem_gpa4, dict) and sem_gpa4:
+            semesters_passed = len(sem_gpa4)
+        else:
+            semesters_passed = 1
+
+    # Nếu có currentStudySem trong context (từ backend) thì override vị trí hiện tại
+    if current_study_sem:
+        import re as _re
+
+        m = _re.search(r"(\d+)", current_study_sem)
+        if m:
+            semesters_passed = max(semesters_passed, int(m.group(1)))
+
+    # Tốc độ học trung bình của riêng sinh viên (tín chỉ/kỳ)
+    user_avg_credits_per_sem = (
+        total_credits_passed / semesters_passed if semesters_passed > 0 else ideal_avg_credits_per_sem
+    )
+    if user_avg_credits_per_sem <= 0:
+        user_avg_credits_per_sem = ideal_avg_credits_per_sem or required_credits
+
+    # Dự báo số học kỳ cần thêm để hoàn thành tín chỉ nếu giữ nhịp hiện tại
+    if remaining_credits > 0 and user_avg_credits_per_sem > 0:
+        import math as _math
+
+        semesters_needed = _math.ceil(remaining_credits / user_avg_credits_per_sem)
+    else:
+        semesters_needed = 0
+
+    # Ước lượng vị trí hiện tại trong chương trình (gần học kỳ mấy)
+    current_semester_estimate = semesters_passed
+    remaining_semesters_ideal = max(SEMESTERS - current_semester_estimate, 0)
+
+    # Tổng hợp đánh giá mức độ khả năng tốt nghiệp đúng hạn bằng thang rủi ro
+    level = "TRUNG BÌNH"
+    reasons: list[str] = []
+
+    # Điều kiện rất khả quan (đủ tín chỉ, đủ GPA, không nợ môn)
+    if remaining_credits <= 0 and gpa4 >= MIN_GPA4 and debt_credits == 0:
+        level = "CAO"
+        reasons.append(
+            "Bạn đã đủ tín chỉ, GPA đạt yêu cầu và không còn môn nợ, gần như chỉ cần hoàn tất các thủ tục cuối cùng."
+        )
+    else:
+        # Xem xét từng yếu tố: GPA, tiến độ tín chỉ, nợ môn, số kỳ còn lại
+        if gpa4 < MIN_GPA4:
+            reasons.append(
+                "GPA hiện tại đang thấp hơn ngưỡng tối thiểu, bạn cần cải thiện điểm các kỳ tới để không rơi vào vùng rủi ro."
+            )
+
+        if remaining_credits > 0:
+            reasons.append(
+                "Bạn còn thiếu khoảng "
+                f"{remaining_credits} tín chỉ. Với nhịp học trung bình hiện tại khoảng "
+                f"{user_avg_credits_per_sem:.1f} tín chỉ/kỳ, nếu vẫn giữ đúng nhịp này thì có nguy cơ "
+                "phải kéo dài thêm thời gian học ngoài khung chương trình chuẩn. "
+                "Để chủ động hơn, bạn có thể cân nhắc đăng ký nhiều tín chỉ hơn mỗi kỳ (trong khả năng chịu tải của mình)."
+            )
+
+        if debt_credits > 0:
+            reasons.append(
+                f"Bạn đang nợ {debt_credits} tín chỉ (mức rủi ro {debt_risk_text}); nếu không xử lý sớm, "
+                "môn nợ sẽ chiếm chỗ các môn mới trong các kỳ sau."
+            )
+
+        # Nhận xét thêm về nhịp học hiện tại, không đưa ra con số 'còn bao nhiêu kỳ' cụ thể
+        if remaining_credits > 0:
+            reasons.append(
+                f"Nhìn chung, với nhịp hiện tại {user_avg_credits_per_sem:.1f} tín/kỳ, "
+                "bạn nên trao đổi với cố vấn học tập để lên kế hoạch đăng ký môn cho các kỳ tới "
+                "sao cho vừa đủ tiến độ tốt nghiệp, vừa phù hợp sức học."
+            )
+
+        # --- Đánh giá tổng hợp bằng risk_score (kết hợp gợi ý của bạn) ---
+        risk_score = 0
+
+        # Rủi ro tín chỉ còn thiếu
+        if remaining_credits > 60:
+            risk_score += 2
+        elif remaining_credits > 40:
+            risk_score += 1
+
+        # Rủi ro về số kỳ cần thêm so với số kỳ chuẩn còn lại
+        if semesters_needed > remaining_semesters_ideal + 1:
+            risk_score += 2
+        elif semesters_needed > remaining_semesters_ideal:
+            risk_score += 1
+
+        # Rủi ro do GPA và nợ môn
+        risk_score += gpa_risk + debt_risk
+
+        if risk_score <= 1:
+            level = "CAO"
+        elif risk_score <= 4:
+            level = "TRUNG BÌNH / KHẢ QUAN"
+        else:
+            level = "THẤP"
+
+    final_assessment = (
+        f"Khả năng tốt nghiệp đúng hạn hiện được đánh giá ở mức: {level}. "
+        "Đây là ước lượng dựa trên tiến độ tín chỉ, GPA và số môn nợ hiện tại; "
+        "nếu bạn giữ được nhịp học ổn định và xử lý dần các môn nợ thì vẫn có thể chủ động kiểm soát lộ trình ra trường."
     )
 
-    return reply
+    details = "\n".join(f"- {r}" for r in reasons) if reasons else ""
+
+    # Tổng hợp câu trả lời
+    reply_parts = [
+        "Đánh giá khả năng tốt nghiệp đúng hạn (dựa trên dữ liệu hiện tại):",
+        "",
+        f"1. Tín chỉ tích lũy: {total_credits_passed}/{required_credits} tín chỉ. {credits_status}",
+        f"2. GPA tích lũy: {gpa_status}",
+        f"3. Môn nợ: {debt_status}",
+    ]
+    # Không hiển thị con số 'cần bao nhiêu kỳ' cụ thể để tránh gây hiểu nhầm với tiến trình thực tế từng sinh viên
+    if details:
+        reply_parts.append("")
+        reply_parts.append("Nhận xét chi tiết:")
+        reply_parts.append(details)
+    reply_parts.append("")
+    reply_parts.append(final_assessment)
+
+    return "\n".join(reply_parts)
 
 
 def _answer_academic_warning(user_id: str) -> str:

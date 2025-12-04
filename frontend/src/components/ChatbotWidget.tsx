@@ -9,6 +9,12 @@ type ChatbotMessage = {
   text: string;
 };
 
+// Loại bỏ các ký tự định dạng markdown cơ bản (đặc biệt là dấu * mà model trả về)
+function normalizeBotReply(raw: string): string {
+  if (!raw) return '';
+  return raw.replace(/\*/g, '').trim();
+}
+
 export default function ChatbotWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatbotMessage[]>([
@@ -55,7 +61,8 @@ export default function ChatbotWidget() {
       });
       if (!res.ok) throw new Error('response_not_ok');
       const data = (await res.json()) as { reply?: string };
-      const reply = data.reply && data.reply.trim() ? data.reply : 'Chatbot hiện không trả lời được, bạn thử lại sau nhé.';
+      const rawReply = data.reply && data.reply.trim() ? data.reply : 'Chatbot hiện không trả lời được, bạn thử lại sau nhé.';
+      const reply = normalizeBotReply(rawReply);
       const botMsg: ChatbotMessage = { id: Date.now() + 1, from: 'bot', text: reply };
       setMessages((prev) => [...prev, botMsg]);
     } catch (err) {

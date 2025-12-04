@@ -15,15 +15,22 @@ export const getResults: RequestHandler = async (req, res) => {
   const user = await User.findById(userId);
   if (!user) return res.status(404).json({ message: 'User not found' });
   const doc = await UserResults.findOne({ user: user._id });
-  return res.json({ data: (doc?.data || {}), stats: { semGpa4: doc?.semGpa4 || {}, cumGpa4: doc?.cumGpa4 || {} }, specialization: doc?.specialization });
+  return res.json({
+    data: (doc?.data || {}),
+    stats: { semGpa4: doc?.semGpa4 || {}, cumGpa4: doc?.cumGpa4 || {} },
+    specialization: doc?.specialization,
+    currentStudySem: doc?.currentStudySem,
+  });
 };
 
 export const updateResults: RequestHandler = async (req, res) => {
-  const { data, specialization } = req.body ?? {};
+  const { data, specialization, currentStudySem } = req.body ?? {};
   const userId = getUserId(req);
   if (!userId) return res.status(400).json({ message: 'userId required' });
   if (!mongoose.isValidObjectId(userId)) return res.status(400).json({ message: 'invalid userId' });
-  if (!data && specialization === undefined) return res.status(400).json({ message: 'data or specialization required' });
+  if (!data && specialization === undefined && currentStudySem === undefined) {
+    return res.status(400).json({ message: 'data, specialization or currentStudySem required' });
+  }
   const user = await User.findById(userId);
   if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -94,13 +101,26 @@ export const updateResults: RequestHandler = async (req, res) => {
     setPayload.specialization = specialization;
   }
 
+  if (typeof currentStudySem === 'string' && currentStudySem.trim()) {
+    setPayload.currentStudySem = currentStudySem.trim();
+  } else if (currentStudySem === null) {
+    // Cho phép xoá bỏ kỳ học hiện tại nếu client gửi null
+    setPayload.currentStudySem = undefined;
+  }
+
   const doc = await UserResults.findOneAndUpdate(
     { user: user._id },
     { $set: setPayload },
     { new: true, upsert: true }
   );
 
-  return res.json({ ok: true, data: doc.data, stats: { semGpa4: doc.semGpa4, cumGpa4: doc.cumGpa4 }, specialization: doc.specialization });
+  return res.json({
+    ok: true,
+    data: doc.data,
+    stats: { semGpa4: doc.semGpa4, cumGpa4: doc.cumGpa4 },
+    specialization: doc.specialization,
+    currentStudySem: doc.currentStudySem,
+  });
 };
 
 export const clearResults: RequestHandler = async (req, res) => {

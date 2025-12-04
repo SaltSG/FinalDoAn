@@ -714,12 +714,18 @@ export default function CalendarPage() {
 
       setDeadlineModalOpen(false);
       setEditingDeadline(null);
+      const wasExam = deadlineIsExam;
       setDeadlineIsExam(false);
       deadlineForm.resetFields();
-      message.success(editingDeadline ? 'Đã cập nhật deadline' : 'Đã tạo deadline');
+      if (wasExam) {
+        message.success(editingDeadline ? 'Đã cập nhật lịch thi' : 'Đã tạo lịch thi');
+      } else {
+        message.success(editingDeadline ? 'Đã cập nhật deadline' : 'Đã tạo deadline');
+      }
     } catch (err: any) {
       if (err?.errorFields) return; // Validation error
-      message.error('Cập nhật deadline thất bại');
+      const errorMsg = deadlineIsExam ? 'Cập nhật lịch thi thất bại' : 'Cập nhật deadline thất bại';
+      message.error(errorMsg);
     }
   }, [editingDeadline, deadlineForm, user?.id, mergeDateTime, deadlineIsExam, selectedExamCourse]);
 

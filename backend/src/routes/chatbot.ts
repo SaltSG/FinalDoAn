@@ -83,6 +83,7 @@ router.get('/context', async (req: Request, res: Response) => {
       cumGpa4: resultsDoc?.cumGpa4 || {},
     },
     specialization: resultsDoc?.specialization || null,
+    currentStudySem: resultsDoc?.currentStudySem || null,
     curriculum,
     deadlines,
   });
