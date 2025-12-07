@@ -87,7 +87,7 @@ export default function ResultsPage() {
 
   // helper màu tag theo letter
   const letterTagColor = (l: Letter) => {
-    // Toàn bộ tag gợi ý dùng màu vàng để nhất quán theo yêu cầu
+    
     return { color: 'gold', text: l };
   };
 
@@ -113,7 +113,7 @@ export default function ResultsPage() {
       setBaseData(data);
       const first = data.semesters[0]?.semester;
       if (first) setSemesterKey(first);
-      // luôn đồng bộ toàn bộ học kỳ từ curriculum (không dùng dữ liệu mẫu/đã lưu cũ)
+      // luôn đồng bộ toàn bộ học kỳ từ curriculum 
       const mapped: Record<string, EditableCourse[]> = {};
       for (const sem of data.semesters) {
         mapped[sem.semester] = sem.courses.map((c, idx) => ({ id: `${c.code}-${idx}`, ...c })) as any;
@@ -323,7 +323,7 @@ export default function ResultsPage() {
           if ((best10 ?? 0) >= 4) earnedCr += credit;
         }
 
-        // GPA tích lũy: chỉ tính các học phần ĐẠT (>= D) theo yêu cầu "tổng số tín chỉ tích lũy"
+        // GPA tích lũy: chỉ tính các học phần ĐẠT (>= D) 
         if (countGpa && best10 !== undefined && best10 >= 4) {
           cumCrForGpa += credit;
           cumSum10 += (best10 as number) * credit;
@@ -348,7 +348,7 @@ export default function ResultsPage() {
 
     const threshold = TARGETS.find((t) => t.value === target)!.threshold4;
 
-    // GỢI Ý CHO TẤT CẢ CÁC HỌC KỲ CÙNG LÚC (GLOBAL GREEDY)
+   
     // - Tính GPA tích lũy toàn khóa.
     // - Chọn một số môn ở nhiều kỳ sao cho nâng chúng lên sẽ giúp đạt mục tiêu.
 

@@ -290,22 +290,25 @@ export default function DashboardPage({ logoSrc }: DashboardPageProps) {
       }
     }
     
-    // Cập nhật override
-    setOverride(newOverride);
+    // Tạo deep copy để đảm bảo React detect thay đổi và re-render
+    const newOverrideCopy = JSON.parse(JSON.stringify(newOverride));
+    
+    // Cập nhật override ngay lập tức để UI phản hồi (GPA và mục tiêu sẽ tự động cập nhật)
+    setOverride(newOverrideCopy);
     try {
-      localStorage.setItem('progress.override', JSON.stringify({ data: newOverride }));
-      window.dispatchEvent(new Event('progress-override-changed'));
+      localStorage.setItem('progress.override', JSON.stringify({ data: newOverrideCopy }));
     } catch {}
     
     // Sync với server
     const u = getAuthUser();
     if (u?.id) {
       try {
-        await saveResults(u.id, newOverride);
+        await saveResults(u.id, newOverrideCopy);
         message.success('Đã lưu thành công');
         setCurrentSemModalOpen(false);
       } catch (err: any) {
         message.error('Lưu thất bại: ' + (err?.message || 'Lỗi không xác định'));
+        // Nếu lưu server thất bại, có thể rollback hoặc giữ nguyên state local
       }
     } else {
       message.success('Đã lưu thành công');

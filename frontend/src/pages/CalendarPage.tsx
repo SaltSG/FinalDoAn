@@ -269,7 +269,7 @@ export default function CalendarPage() {
         return true;
       })
       .map((d) => {
-        // Với lịch thi, giữ nguyên giờ thi (không ép về startOf('day'))
+        // Với lịch thi, giữ nguyên giờ thi 
         const startDateTime = d.startAt
           ? dayjs(d.startAt)
           : d.endAt
@@ -283,7 +283,7 @@ export default function CalendarPage() {
           d.endAt
         );
 
-        // Exam schedule: tím/hồng nổi bật
+        
         let color: string;
         switch (effectiveStatus) {
           case 'completed':
@@ -372,7 +372,7 @@ export default function CalendarPage() {
         allDay: selection.allDay,
         time: [dayjs(selection.start), dayjs(selection.end ?? selection.start)],
         description: '',
-        color: '#1a73e8', // Default blue like Google Calendar
+        color: '#1a73e8', 
       });
       setModalOpen(true);
     },
@@ -390,7 +390,7 @@ export default function CalendarPage() {
         if (!found) return;
         setEditingDeadline(found);
         setDeadlineIsExam(!!found.isExam);
-        // Nếu là lịch thi và có courseCode trùng với môn trong CTĐT, cố gắng map lại
+      
         if (found.isExam && found.courseCode && examCourses.length) {
           const match = examCourses.find((c) => c.code === found.courseCode);
           setSelectedExamCourse(match || null);
@@ -883,7 +883,7 @@ export default function CalendarPage() {
         );
       }
 
-      // Week/Day view: Sự kiện thường / lịch thi: hiển thị tiêu đề trên, giờ dưới cho dễ đọc
+      // Week/Day view: Sự kiện thường / lịch thi
       if (!isDeadline || !deadlineId) {
         return (
           <div className="fc-event-inner-custom">
@@ -895,7 +895,7 @@ export default function CalendarPage() {
         );
       }
 
-      // Deadline thường: thêm nút ✓ để toggle hoàn thành nhanh
+      // Deadline thường: thêm nút ✓ 
       const isCompleted = status === 'completed';
 
       return (
@@ -1097,6 +1097,7 @@ export default function CalendarPage() {
         open={modalOpen}
         onCancel={handleCloseEventModal}
         wrapClassName="calendar-event-modal"
+        style={{ top: 20 }}
         footer={
           <div
             style={{
@@ -1167,6 +1168,7 @@ export default function CalendarPage() {
               showTime
               style={{ width: '100%' }}
               format="YYYY-MM-DD HH:mm"
+              popupStyle={{ zIndex: 1051 }}
             />
           </Form.Item>
 
