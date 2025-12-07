@@ -1,0 +1,9 @@
+backend/
+ml/
+admin/
+node_modules/
+*.md
+.git/
+.gitignore
+package-lock.json
+
