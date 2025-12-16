@@ -9,7 +9,7 @@ type ChatMessage = {
   text: string;
 };
 
-// Đồng bộ cách hiển thị: bỏ các dấu * dùng cho markdown để nhìn gọn sạch hơn
+
 function normalizeBotReply(raw: string): string {
   if (!raw) return '';
   return raw.replace(/\*/g, '').trim();

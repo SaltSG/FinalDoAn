@@ -17,12 +17,63 @@ import { getAuthUser } from '../services/auth';
 import { fetchDeadlines as apiFetchDeadlines } from '../services/deadlines';
 import { fetchEvents as apiFetchEvents } from '../services/events';
 
+function formatTimeRemaining(endAt: dayjs.Dayjs): string {
+  const now = dayjs();
+  const diffMinutes = endAt.diff(now, 'minute');
+  
+  if (diffMinutes <= 0) {
+    return 'Đã đến hạn';
+  }
+  
+  if (diffMinutes < 60) {
+    return `Còn ${diffMinutes} phút nữa`;
+  }
+  
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  
+  if (minutes === 0) {
+    return `Còn ${hours} giờ nữa`;
+  }
+  
+  return `Còn ${hours} giờ ${minutes} phút nữa`;
+}
+
+export function getNotificationIconAndColor(
+  kind?: 'deadline' | 'exam' | 'event',
+  isExam?: boolean,
+  status?: 'overdue' | 'ongoing' | 'upcoming' | 'completed'
+): { icon: string; color: string } {
+  const effectiveKind = kind || (isExam ? 'exam' : 'deadline');
+  
+  if (effectiveKind === 'exam') {
+    if (status === 'completed') {
+      return { icon: '🎓', color: '#eab308' };
+    }
+    return { icon: '📝', color: '#fbbf24' };
+  }
+  
+  if (effectiveKind === 'event') {
+    return { icon: '📅', color: '#3b82f6' };
+  }
+  
+  if (status === 'overdue') {
+    return { icon: '⏰', color: '#ef4444' }; 
+  }
+  if (status === 'ongoing') {
+    return { icon: '⏰', color: '#f97316' };
+  }
+  if (status === 'completed') {
+    return { icon: '✓', color: '#9ca3af' };
+  }
+  return { icon: '⏰', color: '#f97316' };
+}
+
 export type NotificationItem = {
   id: string;
-  title: string; // Tiêu đề thô (tên deadline / lịch thi)
-  time?: string; // Thời gian hiển thị đã format
-  deadlineAt?: string; // ISO thời điểm kết thúc để tính toán thêm
-  // Loại nguồn: deadline thường, lịch thi, hay sự kiện/lịch học
+  title: string; 
+  time?: string; 
+  deadlineAt?: string;
   kind?: 'deadline' | 'exam' | 'event';
   status?: 'overdue' | 'ongoing' | 'upcoming' | 'completed';
   isExam?: boolean;
@@ -30,7 +81,7 @@ export type NotificationItem = {
 
 type NotificationBellProps = {
   items?: NotificationItem[];
-  count?: number; // số lượng hiển thị trên badge; nếu không truyền, lấy theo items.length
+  count?: number;
   onOpenChange?: (open: boolean) => void;
 };
 
@@ -51,7 +102,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Lưu lại những deadline đã được người dùng "xem rồi" (đã mở popover)
   const getReadSet = () => {
     try {
       const raw = localStorage.getItem('notif.deadline.readIds');
@@ -70,25 +120,23 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     } catch {}
   };
 
-  // Lưu stage nhắc nhở cho từng deadline: 'day' | 'hour' | 'minute'
-  const getStageMap = (): Record<string, 'day' | 'hour' | 'minute'> => {
+  const getStageMap = (): Record<string, 'day' | '90min' | 'hour' | '15min' | 'minute'> => {
     try {
       const raw = localStorage.getItem('notif.deadline.stages');
       if (!raw) return {};
-      const obj = JSON.parse(raw) as Record<string, 'day' | 'hour' | 'minute'>;
+      const obj = JSON.parse(raw) as Record<string, 'day' | '90min' | 'hour' | '15min' | 'minute'>;
       return obj || {};
     } catch {
       return {};
     }
   };
 
-  const saveStageMap = (m: Record<string, 'day' | 'hour' | 'minute'>) => {
+  const saveStageMap = (m: Record<string, 'day' | '90min' | 'hour' | '15min' | 'minute'>) => {
     try {
       localStorage.setItem('notif.deadline.stages', JSON.stringify(m));
     } catch {}
   };
 
-  // Map lưu ngày cuối cùng đã nhắc mỗi lịch thi (key: id, value: 'YYYY-MM-DD')
   const getExamDailyMap = (): Record<string, string> => {
     try {
       const raw = localStorage.getItem('notif.exam.daily');
@@ -106,7 +154,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     } catch {}
   };
 
-  // Lưu các event đã được nhắc 30 phút trước giờ bắt đầu
   const getEventRemindSet = () => {
     try {
       const raw = localStorage.getItem('notif.events.reminded30');
@@ -123,7 +170,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     } catch {}
   };
 
-  // Lưu thứ tự ưu tiên hiển thị theo lần thông báo gần nhất
   const getOrderMap = (): Record<string, number> => {
     try {
       const raw = localStorage.getItem('notif.items.orderTs');
@@ -160,7 +206,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     }
   };
 
-  // Ẩn (xóa) thông báo khỏi danh sách hiện tại (chỉ local, không đụng DB)
   const hideIds = (ids: string[]) => {
     if (!ids.length) return;
     setHidden((prev) => {
@@ -175,15 +220,41 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     });
   };
 
-  // Helper: bật chuông, mở popover và hiện notification đẩy
+  const reorderItems = (items: NotificationItem[]): NotificationItem[] => {
+    const orderMap = getOrderMap();
+    const statusPriority: Record<string, number> = {
+      'ongoing': 3,
+      'upcoming': 2,
+      'overdue': 1,
+      'completed': 0,
+    };
+    return [...items].sort((a, b) => {
+      const oa = orderMap[a.id] ?? 0;
+      const ob = orderMap[b.id] ?? 0;
+      if (oa !== ob) return ob - oa; 
+      
+      const statusA = statusPriority[a.status || 'upcoming'] || 0;
+      const statusB = statusPriority[b.status || 'upcoming'] || 0;
+      if (statusA !== statusB) return statusB - statusA;
+      
+      const ta = a.deadlineAt ? new Date(a.deadlineAt).getTime() : Number.POSITIVE_INFINITY;
+      const tb = b.deadlineAt ? new Date(b.deadlineAt).getTime() : Number.POSITIVE_INFINITY;
+      return ta - tb;
+    });
+  };
+
   const triggerBellAndPush = (reason?: string, ids?: string[]) => {
     if (ids && ids.length) {
       bumpOrderForIds(ids);
+      if (autoItems && autoItems.length > 0) {
+        const reordered = reorderItems(autoItems);
+        setAutoItems(reordered);
+        itemsRef.current = reordered;
+      }
     }
     setUnread(true);
     setOpen(true);
 
-    // Chuẩn bị nội dung hiển thị rõ tên sự kiện / deadline / lịch thi
     let messageText = 'Bạn có thông báo mới';
     let descriptionText =
       'Có deadline, lịch thi hoặc lịch học sắp tới. Bạn mở danh sách thông báo để xem chi tiết nhé.';
@@ -203,24 +274,46 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
         if (related.length === 1) {
           const it = related[0];
           const prefix = makePrefix(it);
-          messageText = `${prefix} mới: ${it.title}`;
+          const { icon } = getNotificationIconAndColor(it.kind, it.isExam, it.status);
+          messageText = `${icon} ${prefix} mới: ${it.title}`;
 
-          // Nếu có thời điểm kết thúc/bắt đầu, mô tả theo kiểu "Còn X ngày ..."
           if (it.deadlineAt) {
             const end = dayjs(it.deadlineAt);
             const today = dayjs().startOf('day');
             const diff = end.startOf('day').diff(today, 'day');
 
-            if (diff > 1) {
-              descriptionText = `Còn ${diff} ngày (đến ${end.format('DD/MM/YYYY HH:mm')}).`;
-            } else if (diff === 1) {
-              descriptionText = `Còn 1 ngày (đến ${end.format('DD/MM/YYYY HH:mm')}).`;
-            } else if (diff === 0) {
-              descriptionText = `Hôm nay đến hạn (${end.format('DD/MM/YYYY HH:mm')}).`;
-            } else if (it.time) {
-              descriptionText = `${prefix} diễn ra lúc ${it.time}.`;
+            if (it.kind === 'event') {
+              const diffMinutes = end.diff(dayjs(), 'minute');
+              if (diffMinutes <= 0) {
+                descriptionText = `Đã bắt đầu lúc ${end.format('DD/MM/YYYY HH:mm')}.`;
+              } else if (diffMinutes < 60) {
+                descriptionText = `Còn ${diffMinutes} phút nữa sẽ bắt đầu (${end.format('DD/MM/YYYY HH:mm')}).`;
+              } else {
+                const hours = Math.floor(diffMinutes / 60);
+                const minutes = diffMinutes % 60;
+                if (minutes === 0) {
+                  descriptionText = `Còn ${hours} giờ nữa sẽ bắt đầu (${end.format('DD/MM/YYYY HH:mm')}).`;
+                } else {
+                  descriptionText = `Còn ${hours} giờ ${minutes} phút nữa sẽ bắt đầu (${end.format('DD/MM/YYYY HH:mm')}).`;
+                }
+              }
             } else {
-              descriptionText = `${prefix} mới được cập nhật.`;
+              if (it.status === 'overdue') {
+                descriptionText = `Quá hạn từ ${end.format('DD/MM/YYYY HH:mm')}.`;
+              } else if (diff > 1) {
+                descriptionText = `Còn ${diff} ngày (đến ${end.format('DD/MM/YYYY HH:mm')}).`;
+              } else if (diff === 1) {
+                descriptionText = `Còn 1 ngày (đến ${end.format('DD/MM/YYYY HH:mm')}).`;
+              } else if (diff === 0) {
+                if (it.status === 'ongoing') {
+                  const timeRemaining = formatTimeRemaining(end);
+                  descriptionText = `Hôm nay đến hạn (${end.format('DD/MM/YYYY HH:mm')}) - ${timeRemaining}.`;
+                } else {
+                  descriptionText = `Hôm nay đến hạn (${end.format('DD/MM/YYYY HH:mm')}).`;
+                }
+              } else {
+                descriptionText = `Đã đến hạn (${end.format('DD/MM/YYYY HH:mm')}).`;
+              }
             }
           } else if (it.time) {
             descriptionText = `${prefix} diễn ra lúc ${it.time}.`;
@@ -231,7 +324,8 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
           messageText = `Có ${related.length} thông báo mới`;
           const lines = related.slice(0, 3).map((it) => {
             const prefix = makePrefix(it);
-            return `• ${prefix}: ${it.title}`;
+            const { icon } = getNotificationIconAndColor(it.kind, it.isExam, it.status);
+            return `• ${icon} ${prefix}: ${it.title}`;
           });
           if (related.length > 3) {
             lines.push(`… và ${related.length - 3} thông báo khác`);
@@ -239,20 +333,36 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
           descriptionText = lines.join('\n');
         }
       } else if (reason) {
-        // Không tìm thấy item cụ thể, fallback dùng reason
         descriptionText = reason;
+      }
+    }
+
+    let notificationIcon: string | undefined;
+    let notificationColor: string | undefined;
+    if (ids && ids.length) {
+      const source = itemsRef.current || autoItems || [];
+      const related = source.filter((it) => ids.includes(it.id));
+      if (related.length > 0) {
+        const firstItem = related[0];
+        const { icon, color } = getNotificationIconAndColor(
+          firstItem.kind,
+          firstItem.isExam,
+          firstItem.status
+        );
+        notificationIcon = icon;
+        notificationColor = color;
       }
     }
 
     try {
       notification.open({
-        message: messageText,
+        message: notificationIcon ? `${notificationIcon} ${messageText}` : messageText,
         description: descriptionText,
         placement: 'bottomRight',
-        duration: 0, // 0 = chỉ tắt khi người dùng tự đóng
+        duration: 0,
+        style: notificationColor ? { borderLeft: `4px solid ${notificationColor}` } : undefined,
       });
     } catch {
-      // ignore
     }
   };
 
@@ -264,20 +374,23 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     const now = dayjs();
 
     list.forEach((it) => {
-      // Chỉ áp dụng cho deadline / lịch thi, không áp dụng cho sự kiện
       if (it.kind === 'event') return;
       if (!it.deadlineAt) return;
       if (it.status === 'overdue') return;
 
       const end = dayjs(it.deadlineAt);
       const diffMinutes = end.diff(now, 'minute');
-      if (diffMinutes <= 0) return; // đã tới hạn hoặc quá hạn, sẽ được xử lý ở nhánh khác
+      if (diffMinutes <= 0) return;
 
-      let stage: 'day' | 'hour' | 'minute' | null = null;
+      let stage: 'day' | '90min' | 'hour' | '15min' | 'minute' | null = null;
       if (diffMinutes <= 5) {
         stage = 'minute';
+      } else if (diffMinutes <= 15) {
+        stage = '15min';
       } else if (diffMinutes <= 60) {
         stage = 'hour';
+      } else if (diffMinutes <= 90) {
+        stage = '90min';
       } else if (diffMinutes <= 1440) {
         stage = 'day';
       }
@@ -285,7 +398,7 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
       if (!stage) return;
 
       const prev = stageMap[it.id];
-      const order = { day: 1, hour: 2, minute: 3 } as const;
+      const order = { day: 1, '90min': 2, hour: 3, '15min': 4, minute: 5 } as const;
       if (!prev || order[stage] > order[prev]) {
         stageMap[it.id] = stage;
         shouldNotify = true;
@@ -299,7 +412,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     }
   };
 
-  // Nhắc cho các sự kiện / lịch học: 30 phút trước giờ bắt đầu
   const maybeTriggerEventReminders = (list: NotificationItem[]) => {
     const reminded = getEventRemindSet();
     let shouldNotify = false;
@@ -313,7 +425,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
       const start = dayjs(it.deadlineAt);
       const diffMinutes = start.diff(now, 'minute');
 
-      // Chỉ nhắc trong khoảng từ 0 → 30 phút trước giờ bắt đầu, và mỗi event chỉ nhắc 1 lần
       if (diffMinutes <= 30 && diffMinutes >= 0 && !reminded.has(it.id)) {
         reminded.add(it.id);
         shouldNotify = true;
@@ -327,7 +438,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     }
   };
 
-  // Lịch thi: nhắc mỗi ngày một lần với thông điệp "Còn X ngày..."
   const maybeTriggerExamDailyReminders = (list: NotificationItem[]) => {
     const map = getExamDailyMap();
     const today = dayjs().format('YYYY-MM-DD');
@@ -340,12 +450,8 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
       if (!it.deadlineAt) return;
 
       const end = dayjs(it.deadlineAt);
-      // Bỏ qua nếu đã thi xong
       if (end.isBefore(now, 'day')) return;
 
-      // Chỉ nhắc daily khi còn ít nhất 1 ngày (diffDays > 0).
-      // Khi bước vào ngày thi (diffDays <= 0) thì dùng rule "1 ngày / 1 giờ / 5 phút"
-      // để tránh trùng popup.
       const diffDays = end.startOf('day').diff(dayjs().startOf('day'), 'day');
       if (diffDays <= 0) return;
 
@@ -368,11 +474,8 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     if (!u?.id) return;
     Promise.all([apiFetchDeadlines(u.id), apiFetchEvents()])
       .then(([rsDeadlines, rsEvents]) => {
-        // 1) Map deadlines (bao gồm cả lịch thi)
         const deadlineItems: NotificationItem[] = rsDeadlines
-          // include overdue + ongoing + upcoming, exclude completed
           .filter((d) => d.status !== 'completed')
-          // newest first (desc by endAt/createdAt)
           .sort(
             (a, b) =>
               new Date(b.endAt || b.createdAt).getTime() -
@@ -388,7 +491,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
             kind: d.isExam ? 'exam' : 'deadline',
           }));
 
-        // 2) Map calendar events (lịch học / sự kiện cá nhân)
         const now = dayjs();
         const eventItems: NotificationItem[] = (rsEvents || []).map((e) => {
           const start = dayjs(e.start);
@@ -405,42 +507,26 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
             id: `event-${e._id}`,
             title: e.title,
             time: start.format('DD/MM/YYYY HH:mm'),
-            deadlineAt: e.start, // dùng giờ bắt đầu để tính nhắc nhở
+            deadlineAt: e.start,
             status,
             isExam: false,
             kind: 'event',
           };
         });
 
-        // Trộn deadline / lịch thi / sự kiện
         let list: NotificationItem[] = [...deadlineItems, ...eventItems];
-
-        // Sắp xếp theo lần thông báo gần nhất:
-        // - Cái nào vừa được "ping" gần đây sẽ nhảy lên trên cùng.
-        // - Nếu chưa từng được thông báo, fallback theo thời gian đến hạn/bắt đầu (gần tới trước).
-        const orderMap = getOrderMap();
-        list = list.sort((a, b) => {
-          const oa = orderMap[a.id] ?? 0;
-          const ob = orderMap[b.id] ?? 0;
-          if (oa !== ob) return ob - oa; // lớn hơn (mới hơn) lên đầu
-
-          const ta = a.deadlineAt ? new Date(a.deadlineAt).getTime() : Number.POSITIVE_INFINITY;
-          const tb = b.deadlineAt ? new Date(b.deadlineAt).getTime() : Number.POSITIVE_INFINITY;
-          return ta - tb;
-        });
+        list = reorderItems(list);
 
         setAutoItems(list);
         itemsRef.current = list;
 
         const read = getReadSet();
 
-        // Chia riêng deadline/lịch thi và sự kiện
         const deadlineLike = list.filter(
           (it) => it.kind === 'deadline' || it.kind === 'exam' || !it.kind
         );
         const eventLike = list.filter((it) => it.kind === 'event');
 
-        // 1) Overdue deadline: chỉ notify cho item chưa được đọc
         const newOverdue = deadlineLike.filter(
           (it) => it.status === 'overdue' && !read.has(it.id)
         );
@@ -449,7 +535,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
           triggerBellAndPush(undefined, newOverdue.map((i) => i.id));
         }
 
-        // 2) Deadline / lịch thi chưa quá hạn: nhắc theo mốc thời gian (còn 1 ngày, 1 tiếng, 5 phút)
         const nonOverdueDeadlines = deadlineLike.filter(
           (it) => it.status !== 'overdue'
         );
@@ -457,12 +542,10 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
           maybeTriggerUpcomingReminders(nonOverdueDeadlines);
         }
 
-        // 3) Lịch học / sự kiện: nhắc 30 phút trước giờ bắt đầu
         if (eventLike.length > 0) {
           maybeTriggerEventReminders(eventLike);
         }
 
-        // 4) Lịch thi: nhắc mỗi ngày một lần
         const examLike = list.filter((it) => it.kind === 'exam');
         if (examLike.length > 0) {
           maybeTriggerExamDailyReminders(examLike);
@@ -471,18 +554,15 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
       .catch(() => {});
   }, []);
 
-  // Load lần đầu khi component mount
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
 
-  // Ticker: kiểm tra định kỳ (mỗi phút) để bắt các mốc còn 1 ngày / 1 tiếng / 5 phút
   useEffect(() => {
     const id = setInterval(() => {
       const src = itemsRef.current || autoItems || [];
       if (!src.length) return;
 
-      // Chỉ xét các deadline còn hạn (upcoming/ongoing), bất kể đã mở popover trước đó hay chưa.
       const deadlineLike = src.filter(
         (it) => (it.kind === 'deadline' || it.kind === 'exam' || !it.kind) && it.status !== 'overdue'
       );
@@ -490,14 +570,12 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
         maybeTriggerUpcomingReminders(deadlineLike);
       }
 
-      // Và các sự kiện / lịch học để nhắc 30 phút trước giờ bắt đầu
       const eventLike = src.filter((it) => it.kind === 'event');
       if (eventLike.length) {
         maybeTriggerEventReminders(eventLike);
       }
 
-       // Lịch thi: nhắc lại mỗi ngày một lần
-       const examLike = src.filter((it) => it.kind === 'exam');
+      const examLike = src.filter((it) => it.kind === 'exam');
        if (examLike.length) {
          maybeTriggerExamDailyReminders(examLike);
        }
@@ -505,21 +583,17 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     return () => clearInterval(id);
   }, [autoItems]);
 
-  // Poll backend định kỳ để lấy các deadline / lịch học mới tạo trong lúc user đang dùng
   useEffect(() => {
     const id = setInterval(() => {
       loadNotifications();
-    }, 60_000); // mỗi 60 giây gọi API lại một lần
+    }, 60_000);
     return () => clearInterval(id);
   }, [loadNotifications]);
 
   const handleOpenChange = (v: boolean) => {
     setOpen(v);
     if (v) {
-      // Khi user mở popover, coi như đã "đọc" tất cả các thông báo hiện tại
       const src = items && items.length ? items : autoItems || [];
-      // Nhưng chỉ đánh dấu "đã đọc" cho các thông báo đã quá hạn (overdue),
-      // để tránh spam lại cùng một thông báo quá hạn.
       const overdueIds = src.filter((i) => i.status === 'overdue').map((i) => i.id);
       if (overdueIds.length) {
         addReadIds(overdueIds);
@@ -534,7 +608,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
 
   const mergedItems = useMemo(() => {
     const base = items && items.length ? items : autoItems || [];
-    // Ẩn các item đã bị user xóa khỏi thông báo
     return base.filter((it) => !hidden.has(it.id));
   }, [items, autoItems, hidden]);
 
@@ -572,7 +645,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
   };
 
   const content = mergedItems.length ? (
-    // Giới hạn chiều cao ~5 item, có scroll để xem thông báo cũ hơn
     <div className="notif-list-scroll">
       {selectionMode && (
         <div
@@ -639,7 +711,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
               break;
           }
 
-          // Dòng mô tả phụ: đếm ngược ngày nếu có deadlineAt
           let subText: string | undefined;
           if (it.deadlineAt) {
             const end = dayjs(it.deadlineAt);
@@ -653,7 +724,12 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
             } else if (diff === 1) {
               subText = `Còn 1 ngày (đến ${end.format('DD/MM/YYYY HH:mm')})`;
             } else if (diff === 0) {
-              subText = `Hôm nay đến hạn (${end.format('DD/MM/YYYY HH:mm')})`;
+              if (status === 'ongoing') {
+                const timeRemaining = formatTimeRemaining(end);
+                subText = `Hôm nay đến hạn (${end.format('DD/MM/YYYY HH:mm')}) - ${timeRemaining}`;
+              } else {
+                subText = `Hôm nay đến hạn (${end.format('DD/MM/YYYY HH:mm')})`;
+              }
             } else {
               subText = it.time
                 ? `Hạn: ${end.format('DD/MM/YYYY HH:mm')}`
@@ -667,6 +743,7 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
           if (kind === 'exam') prefix = 'Lịch thi';
           else if (kind === 'event') prefix = 'Lịch học';
 
+          const { icon, color } = getNotificationIconAndColor(kind, isExam, status);
           const isSelected = selectedIds.has(it.id);
 
           return (
@@ -689,6 +766,7 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
                     }}
                   >
                     <Typography.Text strong ellipsis style={{ maxWidth: 200 }}>
+                      <span style={{ marginRight: 4 }}>{icon}</span>
                       {prefix}: {it.title}
                     </Typography.Text>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -748,7 +826,6 @@ export default function NotificationBell({ items = [], count, onOpenChange }: No
     </div>
   );
 
-  // Số thông báo "chưa đọc": những item có thời điểm thông báo mới nhất > lần cuối user mở popover
   const badgeCount = useMemo(() => {
     if (typeof count === 'number') return count;
     const orderMap = getOrderMap();

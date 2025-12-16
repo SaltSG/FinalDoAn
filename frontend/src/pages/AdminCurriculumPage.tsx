@@ -92,7 +92,7 @@ function inferCategory(course: CourseRow, spec: Spec): string | undefined {
     return 'major';
   }
 
-  // Mặc định: chưa phân loại
+
   return undefined;
 }
 

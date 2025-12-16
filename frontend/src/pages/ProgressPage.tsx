@@ -58,7 +58,7 @@ function inferCategoryFromCourse(course: CourseResult): string | undefined {
     return 'common';
   }
 
-  // Cơ sở ngành: toán, xác suất, tin học cơ sở, CTDL, kiến trúc máy tính...
+
   if (
     code.startsWith('BAS12') ||
     code.startsWith('INT11') ||
@@ -144,7 +144,7 @@ export default function ProgressPage() {
     fetchCurriculum(specialization).then(setBase).catch(() => setBase(undefined));
   }, [specialization]);
 
-  // On mount, if user has saved specialization in DB, use it
+  
   useEffect(() => {
     const u = getAuthUser();
     if (!u?.id) return;
@@ -215,7 +215,7 @@ export default function ProgressPage() {
     };
   }, []);
 
-  // Merge tạm thời các điểm được đồng bộ từ trang Kết quả (override) vào base
+  
   const data: ProgressData | undefined = useMemo(() => {
     if (!base) return undefined;
     if (!override) return base;
@@ -343,7 +343,7 @@ export default function ProgressPage() {
     return dist;
   }, [data]);
 
-  // Group strengths/weaknesses by simple keyword buckets
+  
   const groupStats = useMemo(() => {
     if (!data) return [] as { group: string; avg4?: number; credits: number }[];
     const groups: { group: string; keywords: string[] }[] = [
@@ -444,10 +444,10 @@ export default function ProgressPage() {
                 window.dispatchEvent(new Event('current-study-sem-changed'));
               } catch {/* ignore */}
 
-              // Lưu kỳ học hiện tại lên backend để chatbot và các phần khác dùng được
+              
               const u = getAuthUser();
               if (u?.id) {
-                // Gửi kỳ học hiện tại lên backend (không đụng tới dữ liệu điểm)
+                
                 fetch('/api/results', {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
@@ -503,7 +503,7 @@ export default function ProgressPage() {
             width={900}
           >
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {/* Ô 1: GPA kỳ hiện tại */}
+              {}
               <Card size="small">
                 <Space direction="vertical" size={8} style={{ width: '100%' }}>
                   <Typography.Text strong style={{ color: 'var(--color-secondary)' }}>GPA (thang 4) học kỳ</Typography.Text>
@@ -529,7 +529,7 @@ export default function ProgressPage() {
                 </Space>
               </Card>
 
-              {/* Ô 2: Môn trượt kỳ hiện tại */}
+              {}
               <Card size="small">
                 <Space direction="vertical" size={8} style={{ width: '100%' }}>
                   <Typography.Text strong style={{ color: 'var(--color-secondary)' }}>Môn trượt học kỳ</Typography.Text>
@@ -549,7 +549,7 @@ export default function ProgressPage() {
                 </Space>
               </Card>
 
-              {/* Ô 3: Phân bố điểm chữ (gọn) */}
+              {}
               <Card size="small">
                 <Space direction="vertical" size={8} style={{ width: '100%' }}>
                   <Typography.Text strong style={{ color: 'var(--color-secondary)' }}>Phân bố điểm chữ (HK)</Typography.Text>

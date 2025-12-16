@@ -4,7 +4,6 @@ import { ChatRead } from '../models/ChatRead';
 import path from 'path';
 import { buildPublicUrl } from '../utils/upload';
 
-// In-memory SSE clients per room
 type Client = { id: string; res: any };
 const roomClients = new Map<string, Set<Client>>();
 
@@ -13,7 +12,7 @@ function broadcast(room: string, data: any) {
   if (!set) return;
   const payload = `data: ${JSON.stringify(data)}\n\n`;
   for (const c of set) {
-    try { c.res.write(payload); } catch { /* ignore */ }
+    try { c.res.write(payload); } catch {}
   }
 }
 
@@ -52,7 +51,6 @@ export const sendMessage: RequestHandler = async (req, res) => {
   res.json({ ok: true, data: payload });
 };
 
-// Server-side unread tracking
 export const getUnreadCount: RequestHandler = async (req, res) => {
   const room = String(req.query.room || 'global');
   const userId = String((req as any).user?.id || '');
@@ -93,17 +91,15 @@ export const uploadFile: RequestHandler = async (req, res) => {
   });
 };
 
-// List all attachments by type (no pagination, caution for large datasets)
 export const listAttachments: RequestHandler = async (req, res) => {
   const room = String(req.query.room || 'global');
-  const type = String(req.query.type || 'file'); // image | video | file
+  const type = String(req.query.type || 'file');
   const base: any = { room, 'attachment.url': { $exists: true, $ne: '' } };
   if (type === 'image') {
     base['attachment.mimeType'] = { $regex: '^image/' };
   } else if (type === 'video') {
     base['attachment.mimeType'] = { $regex: '^video/' };
   } else {
-    // file: not image and not video
     base.$and = [
       { $or: [{ 'attachment.mimeType': { $exists: false } }, { 'attachment.mimeType': { $eq: '' } }, { 'attachment.mimeType': { $not: /^image\// } }] },
       { $or: [{ 'attachment.mimeType': { $exists: false } }, { 'attachment.mimeType': { $eq: '' } }, { 'attachment.mimeType': { $not: /^video\// } }] },

@@ -1,6 +1,6 @@
 ## Hệ thống quản lý tiến độ học tập cá nhân (React + Node.js)
 
-Monorepo cho đồ án tốt nghiệp: Xây dựng hệ thống quản lý tiến độ học tập cá nhân cho sinh viên ngành Công nghệ đa phương tiện.
+
 
 ### Kiến trúc
 - frontend: React + Vite + TypeScript
@@ -71,7 +71,7 @@ npm run dev
 - Accent: `#5ec6df`
 - Đã khai báo trong `frontend/src/styles.css` dưới dạng CSS variables (`--color-primary`, `--color-secondary`, `--color-accent`).
 
-### Quy ước commit (khuyến nghị)
+### Quy ước commit 
 - feat: tính năng mới
 - fix: sửa lỗi
 - docs: cập nhật tài liệu

@@ -45,12 +45,13 @@ import {
 import { fetchCurriculum, type CurriculumCourse } from '../services/curriculum';
 import { fetchResultsMeta } from '../services/results';
 import { getAuthUser } from '../services/auth';
+import { getNotificationIconAndColor } from '../components/NotificationBell';
 import dayjs from 'dayjs';
 import 'dayjs/locale/vi';
 
 type DeadlineStatus = 'upcoming' | 'ongoing' | 'overdue' | 'completed';
 
-// Helper: ưu tiên dùng status do backend trả về; chỉ fallback tính tay nếu thiếu
+
 const computeDeadlineStatus = (
   status: string | undefined,
   startAt: string | null | undefined,
@@ -60,7 +61,7 @@ const computeDeadlineStatus = (
     return status;
   }
 
-  // Fallback cho dữ liệu cũ không có status: ước lượng đơn giản từ start/end
+ 
   const now = dayjs();
   const start = startAt ? dayjs(startAt) : null;
   const end = endAt ? dayjs(endAt) : null;
@@ -70,7 +71,7 @@ const computeDeadlineStatus = (
   return 'upcoming';
 };
 
-// Helper function to get color based on status
+
 const getStatusColor = (status: DeadlineStatus): string => {
   switch (status) {
     case 'upcoming':
@@ -137,7 +138,7 @@ export default function CalendarPage() {
         '#a855f7', // Tím nhạt
         '#9333ea', // Tím đậm
         '#6b7280', // Xám
-        '#1a73e8', // Xanh Google (mặc định)
+        '#1a73e8', 
       ],
     },
   ];
@@ -149,7 +150,7 @@ export default function CalendarPage() {
 
     (async () => {
       try {
-        // Lấy specialization của user (dev/design) nếu có
+        
         const meta = await fetchResultsMeta(u.id);
         let spec: 'dev' | 'design' = 'dev';
         if (meta.specialization === 'design' || meta.specialization === 'dev') {
@@ -185,16 +186,19 @@ export default function CalendarPage() {
 
   const mapped: EventInput[] = useMemo(() => {
     // Map calendar events
-    const calendarEvents: EventInput[] = events.map((e) => ({
-      id: `event-${e._id}`,
-      title: e.title,
-      start: e.start,
-      end: e.end,
-      allDay: e.allDay,
-      backgroundColor: e.color || '#1a73e8',
-      borderColor: e.color || '#1a73e8',
-      extendedProps: { type: 'event', seriesId: e.seriesId },
-    }));
+    const calendarEvents: EventInput[] = events.map((e) => {
+      const { icon } = getNotificationIconAndColor('event', false, 'upcoming');
+      return {
+        id: `event-${e._id}`,
+        title: `${icon} ${e.title}`,
+        start: e.start,
+        end: e.end,
+        allDay: e.allDay,
+        backgroundColor: e.color || '#3b82f6', // Màu xanh mặc định cho lịch học
+        borderColor: e.color || '#3b82f6',
+        extendedProps: { type: 'event', seriesId: e.seriesId },
+      };
+    });
 
     // Map deadline events (chỉ deadline thường, không bao gồm lịch thi)
     const normalDeadlineEvents: EventInput[] = deadlines
@@ -227,13 +231,11 @@ export default function CalendarPage() {
           d.endAt
         );
 
-        const color = getStatusColor(effectiveStatus);
-        const titlePrefix =
-          effectiveStatus === 'completed' ? '✓ ' : '📅 ';
+        const { icon, color } = getNotificationIconAndColor('deadline', false, effectiveStatus);
 
         return {
           id: `deadline-${d._id}`,
-          title: `${titlePrefix}${d.title}`,
+          title: `${icon} ${d.title}`,
           start: startDate?.toISOString(),
           end: endDate
             ? endDate.add(1, 'day').toISOString()
@@ -258,14 +260,13 @@ export default function CalendarPage() {
       });
 
     // Lịch thi: luôn hiển thị trên lịch, không phụ thuộc công tắc "Hiện Deadline"
+    // Lịch thi quá hạn vẫn hiển thị (không ẩn như deadline thường)
     const examEvents: EventInput[] = deadlines
       .filter((d) => {
         const isExam = !!(d as any).isExam;
         if (!isExam) return false;
         if (!d.endAt && !d.startAt) return false;
-
-        const effectiveStatus = computeDeadlineStatus(d.status, d.startAt, d.endAt);
-        if (effectiveStatus === 'overdue') return false;
+        // Lịch thi quá hạn vẫn hiển thị, không filter ra
         return true;
       })
       .map((d) => {
@@ -283,26 +284,11 @@ export default function CalendarPage() {
           d.endAt
         );
 
-        
-        let color: string;
-        switch (effectiveStatus) {
-          case 'completed':
-            color = '#6b21a8';
-            break;
-          case 'ongoing':
-            color = '#a21caf';
-            break;
-          default:
-            color = '#ec4899';
-            break;
-        }
-
-        const titlePrefix =
-          effectiveStatus === 'completed' ? '🎓 ' : '📝 ';
+        const { icon, color } = getNotificationIconAndColor('exam', true, effectiveStatus);
 
         return {
           id: `deadline-${d._id}`,
-          title: `${titlePrefix}${d.title}`,
+          title: `${icon} ${d.title}`,
           start: startDateTime?.toISOString(),
           end: endDateTime?.toISOString(),
           allDay: false,
@@ -858,7 +844,7 @@ export default function CalendarPage() {
       const status = ext.status as DeadlineStatus | undefined;
       const isMonthView = arg.view.type === 'dayGridMonth';
 
-      // Month view: thêm chấm màu cho events/lịch thi
+      
       if (isMonthView && (!isDeadline || !deadlineId)) {
         const color = arg.event.backgroundColor || arg.event.borderColor || '#1a73e8';
         return (
@@ -883,13 +869,20 @@ export default function CalendarPage() {
         );
       }
 
-      // Week/Day view: Sự kiện thường / lịch thi
       if (!isDeadline || !deadlineId) {
         return (
-          <div className="fc-event-inner-custom">
-            <div className="fc-event-title-main">{arg.event.title}</div>
+          <div
+            className="fc-event-inner-custom"
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <span className="fc-event-title-main">{arg.event.title}</span>
             {arg.timeText && (
-              <div className="fc-event-time-sub">{arg.timeText}</div>
+              <span
+                className="fc-event-time-sub"
+                style={{ opacity: 0.9, fontSize: 11 }}
+              >
+                {arg.timeText}
+              </span>
             )}
           </div>
         );
@@ -1063,19 +1056,19 @@ export default function CalendarPage() {
           eventResize={handleResize}
           eventContent={renderEventContent}
           eventDidMount={(arg) => {
-            // Month view: set background trắng cho events/lịch thi (không phải deadline)
+           
             if (arg.view.type === 'dayGridMonth') {
               const ext: any = arg.event.extendedProps || {};
               const isDeadline = ext.type === 'deadline' && !ext.isExam;
               
-              // Chỉ set background trắng cho events/lịch thi, giữ nguyên deadline
+              
               if (!isDeadline) {
                 const el = arg.el;
                 if (el) {
                   el.style.backgroundColor = '#ffffff';
                   el.style.color = '#111827';
                   el.style.border = 'none';
-                  // Đảm bảo text color không bị override
+                 
                   const eventMain = el.querySelector('.fc-event-main');
                   if (eventMain) {
                     (eventMain as HTMLElement).style.color = '#111827';

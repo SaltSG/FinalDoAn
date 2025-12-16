@@ -28,32 +28,26 @@ export async function initializeSocket(httpServer: HttpServer) {
     path: '/socket.io',
   });
 
-  // Redis adapter (optional via REDIS_URL) + optional client for rate-limit
   const redisUrl = process.env.REDIS_URL;
   let rateLimitRedis: any = null;
   if (redisUrl) {
     const { pubClient, subClient } = createRedisClients(redisUrl);
-    // prevent unhandled error events from crashing
     pubClient.on('error', () => {});
     subClient.on('error', () => {});
     try {
       await Promise.all([pubClient.connect(), subClient.connect()]);
       io.adapter(createAdapter(pubClient, subClient));
       rateLimitRedis = pubClient;
-      // eslint-disable-next-line no-console
       console.log('[socket] redis adapter connected');
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('[socket] redis adapter unavailable, running in memory');
       try { await pubClient.disconnect(); } catch {}
       try { await subClient.disconnect(); } catch {}
     }
   } else {
-    // eslint-disable-next-line no-console
     console.log('[socket] redis adapter disabled (no REDIS_URL)');
   }
 
-  // JWT auth middleware
   io.use((socket, next) => {
     try {
       const token = (socket.handshake.auth as any)?.token || (socket.handshake.query as any)?.token;
@@ -68,9 +62,8 @@ export async function initializeSocket(httpServer: HttpServer) {
     }
   });
 
-  // Simple Redis-based rate limiting helpers
   async function checkRateLimit(userId: string, key: string, limit: number, windowSeconds: number) {
-    if (!rateLimitRedis) return true; // no redis -> allow
+    if (!rateLimitRedis) return true;
     try {
       const redisKey = `rl:${key}:${userId}`;
       const current = await rateLimitRedis.incr(redisKey);
@@ -85,7 +78,6 @@ export async function initializeSocket(httpServer: HttpServer) {
     const user = (socket.data as any).user as { id: string; name?: string };
     const userId = user.id;
 
-    // auto-join global
     socket.join('global');
     io.emit('presence:state', { userId, online: true });
 
@@ -105,7 +97,6 @@ export async function initializeSocket(httpServer: HttpServer) {
       const ok = await checkRateLimit(userId, 'typing', 10, 10);
       if (!ok) return;
       const userName = user.name;
-      // emit to others in the room (avoid echoing to the sender)
       socket.to(room || 'global').emit('chat:typing', { room: room || 'global', userId, userName, typing: !!typing });
     });
 
@@ -145,7 +136,6 @@ export async function initializeSocket(httpServer: HttpServer) {
     });
 
     socket.on('chat:read', ({ room, messageId }) => {
-      // Broadcast ephemeral read event; server-side persistence handled via REST /api/chat/read
       if (!messageId) return;
       io.to(room || 'global').emit('chat:read', { room: room || 'global', messageId, readerId: userId });
     });

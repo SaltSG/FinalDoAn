@@ -19,12 +19,11 @@ const storage = multer.diskStorage({
 export const upload = multer({
   storage,
   limits: {
-    fileSize: Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024), // 25MB default
+    fileSize: Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024),
   },
 });
 
 export function buildPublicUrl(filename: string): string {
-  // Serve via /uploads. If PUBLIC_BASE_URL is set, return absolute URL so other machines can access.
   const base = (process.env.PUBLIC_BASE_URL || '').toString().trim();
   const pathPart = `/uploads/${encodeURIComponent(filename)}`;
   if (!base) return pathPart;

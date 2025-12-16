@@ -8,16 +8,13 @@ function getUserId(req: any): string | undefined {
 }
 
 function computeStatus(startAt?: Date | null, endAt?: Date | null, current?: DeadlineStatus | null): DeadlineStatus {
-  // If current is explicitly null, unmark completed and recalculate from dates
   if (current === null) {
     const now = new Date();
     if (endAt && now > endAt) return 'overdue';
     if (startAt && endAt && now >= startAt && now <= endAt) return 'ongoing';
     return 'upcoming';
   }
-  // If explicitly completed, keep it completed
   if (current === 'completed') return 'completed';
-  // Otherwise calculate from dates
   const now = new Date();
   if (endAt && now > endAt) return 'overdue';
   if (startAt && endAt && now >= startAt && now <= endAt) return 'ongoing';
@@ -31,7 +28,6 @@ export const listDeadlines: RequestHandler = async (req, res) => {
   const user = await User.findById(userId);
   if (!user) return res.status(404).json({ message: 'User not found' });
 
-  // Auto-refresh status on fetch for non-completed items
   const items = await Deadline.find({ user: user._id }).sort({ createdAt: -1 }).lean();
   const updates: any[] = [];
   for (const it of items) {
@@ -98,12 +94,9 @@ export const updateDeadline: RequestHandler = async (req, res) => {
   const existing = await Deadline.findOne({ _id: id, user: user._id });
   if (!existing) return res.status(404).json({ message: 'Deadline not found' });
 
-  // Determine final dates to use for status calculation
   const finalStart = start !== undefined ? (start as any) : (existing.startAt as any);
   const finalEnd = end !== undefined ? (end as any) : (existing.endAt as any);
   
-  // Check if dates are being updated (we don't need to know *how* they changed,
-  // just that at least one of start/end was provided in the request)
   const datesChanged = start !== undefined || end !== undefined;
   
   let statusToUse: DeadlineStatus | null | undefined;

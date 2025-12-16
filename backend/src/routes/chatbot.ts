@@ -30,7 +30,6 @@ async function callMlChatService(message: string, userId?: string) {
   return res.json() as Promise<{ reply: string }>;
 }
 
-// Chat message -> forward to Python service
 router.post('/', requireAuth, async (req: Request, res: Response) => {
   const user = (req as any).user as { id: string } | undefined;
   const { message } = req.body as { message?: string };
@@ -49,7 +48,6 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Aggregated context for ML/chatbot (used by Python service)
 router.get('/context', async (req: Request, res: Response) => {
   const userId = (req.query.userId as string) || (req.headers['x-user-id'] as string);
   if (!userId) return res.status(400).json({ message: 'userId required' });

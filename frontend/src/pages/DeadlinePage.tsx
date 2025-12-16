@@ -51,7 +51,7 @@ type Deadline = {
   status: 'upcoming' | 'ongoing' | 'overdue' | 'completed';
 };
 
-// No subject selection anymore
+
 
 export default function DeadlinePage() {
   const location = useLocation();
@@ -63,17 +63,16 @@ export default function DeadlinePage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'incomplete' | 'completed' | 'upcoming' | 'ongoing' | 'overdue'>('all');
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
-  const hasOpenedFromUrl = useRef<string | null>(null); // Track which deadline ID we've already opened from URL
+  const hasOpenedFromUrl = useRef<string | null>(null); 
 
-  // Sync initial filter from query string if provided (e.g., ?status=ongoing)
-  // If there's an ID in URL, temporarily set filter to 'all' to ensure deadline is loaded
+ 
   useEffect(() => {
     const qs = new URLSearchParams(location.search);
     const deadlineId = qs.get('id');
     const st = (qs.get('status') || '').toLowerCase();
     const allowed = new Set(['all','incomplete','completed','upcoming','ongoing','overdue']);
     
-    // If there's an ID, temporarily use 'all' filter to ensure deadline is loaded
+   
     if (deadlineId && statusFilter !== 'all') {
       setStatusFilter('all');
     } else if (st && allowed.has(st) && st !== statusFilter) {
@@ -81,7 +80,7 @@ export default function DeadlinePage() {
     }
   }, [location.search]);
 
-  // Load from API (server-side filter & createdAt desc)
+ 
   useEffect(() => {
     const u = getAuthUser();
     if (!u?.id) return;
@@ -89,7 +88,7 @@ export default function DeadlinePage() {
     apiFetchDeadlines(u.id, statusParam as any)
       .then((rs) => {
         const mapped = rs
-          // Chỉ hiển thị deadline thường, ẩn hoàn toàn các lịch thi
+          
           .filter((d) => !d.isExam)
           .map((d) => ({
             id: d._id,
@@ -106,16 +105,12 @@ export default function DeadlinePage() {
       .catch(() => {});
   }, [statusFilter]);
 
-  // Auto-open deadline from URL query param (e.g., ?id=xxx)
+ 
   useEffect(() => {
     const qs = new URLSearchParams(location.search);
     const deadlineId = qs.get('id');
     
-    // Only open if:
-    // 1. There's an ID in URL
-    // 2. Deadlines are loaded
-    // 3. Modal is not currently visible
-    // 4. We haven't already opened this ID from URL
+   
     if (deadlineId && deadlines.length > 0 && !isModalVisible && hasOpenedFromUrl.current !== deadlineId) {
       const deadline = deadlines.find(d => d.id === deadlineId);
       if (deadline) {
@@ -130,20 +125,20 @@ export default function DeadlinePage() {
           note: deadline.note
         });
         setIsModalVisible(true);
-        // Remove id from URL to avoid reopening on refresh
+       
         const newSearch = new URLSearchParams(location.search);
         newSearch.delete('id');
         window.history.replaceState({}, '', `${location.pathname}${newSearch.toString() ? '?' + newSearch.toString() : ''}`);
       }
     }
     
-    // Reset the ref if there's no ID in URL anymore
+    
     if (!deadlineId && hasOpenedFromUrl.current) {
       hasOpenedFromUrl.current = null;
     }
   }, [location.search, deadlines, isModalVisible, form]);
 
-  // Sync form values when modal state changes
+ 
   useEffect(() => {
     if (!isModalVisible) return;
     if (editingDeadline) {
@@ -282,16 +277,13 @@ export default function DeadlinePage() {
     const cur = deadlines.find((d) => d.id === id);
     if (!cur) return;
 
-    // Map select value to backend status:
-    // - 'completed'  -> status: 'completed'
-    // - 'ongoing'    -> status: 'ongoing'
-    // - 'upcoming' or 'incomplete' -> omit status to let server compute from dates
+   
     const nextStatus =
       value === 'completed' ? 'completed' : value === 'ongoing' ? 'ongoing' : undefined;
 
     const updated = await apiUpdateDeadline(u.id, id, {
       status: nextStatus,
-      // if 'upcoming' or 'incomplete', omit status to let server compute from times
+      
       startAt: cur.startAt,
       endAt: cur.endAt,
     }).catch(() => null);
@@ -308,7 +300,7 @@ export default function DeadlinePage() {
     }
   };
 
-  const applyFilters = (items: Deadline[]) => items; // server already filtered
+  const applyFilters = (items: Deadline[]) => items; 
 
   const sequenceMap = useMemo(() => {
     const sorted = [...deadlines].sort((a, b) => dayjs(a.createdAt).valueOf() - dayjs(b.createdAt).valueOf());
@@ -386,8 +378,7 @@ export default function DeadlinePage() {
       width: 180,
       align: 'center' as const,
       render: (_: any, record: Deadline) => {
-        // Use status from backend (already computed correctly)
-        // Map backend status to select value
+        
         let selectValue: 'completed' | 'incomplete' | 'ongoing' | 'upcoming';
         switch (record.status) {
           case 'completed':
@@ -400,7 +391,7 @@ export default function DeadlinePage() {
             selectValue = 'upcoming';
             break;
           default:
-            // 'overdue' -> show as 'incomplete' (Không hoàn thành)
+           
             selectValue = 'incomplete';
         }
 
@@ -516,11 +507,11 @@ export default function DeadlinePage() {
         </div>
       </div>
 
-      {/* Nhắc nhở Deadline — đã bỏ theo yêu cầu */}
+      {}
 
-      {/* Main list card */}
+      
 
-      {/* Deadline Table */}
+      {}
       <div>
         <Card 
           title={
@@ -631,7 +622,7 @@ export default function DeadlinePage() {
           setIsModalVisible(false);
           setEditingDeadline(null);
           form.resetFields();
-          // Reset the URL tracking when modal is closed manually
+         
           if (hasOpenedFromUrl.current) {
             hasOpenedFromUrl.current = null;
           }

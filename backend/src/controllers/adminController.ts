@@ -57,7 +57,6 @@ export const getUserStats: RequestHandler = async (_req, res) => {
   const dayMs = 24 * 60 * 60 * 1000;
   const sevenDaysAgo = new Date(now.getTime() - 7 * dayMs);
 
-  // Bắt đầu từ 30 ngày trước (bao gồm hôm nay) tại mốc 00:00
   const start = new Date(now.getTime() - 29 * dayMs);
   start.setHours(0, 0, 0, 0);
 
@@ -86,7 +85,7 @@ export const getUserStats: RequestHandler = async (_req, res) => {
   let runningTotal = totalBeforeWindow;
   for (let i = 0; i < 30; i++) {
     const d = new Date(start.getTime() + i * dayMs);
-    const key = d.toISOString().slice(0, 10); // yyyy-MM-dd
+    const key = d.toISOString().slice(0, 10);
     const newUsers = byDate.get(key) ?? 0;
     runningTotal += newUsers;
     daily.push({ date: key, newUsers, totalUsers: runningTotal });

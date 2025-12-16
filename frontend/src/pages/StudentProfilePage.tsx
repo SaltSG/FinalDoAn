@@ -23,7 +23,6 @@ export default function StudentProfilePage() {
       if (n) setName(n);
       const a = localStorage.getItem(avatarKey);
       if (a) setAvatarUrl(a);
-      // Prefill from auth payload if available (e.g., khi đăng ký đã nhập mã SV)
       if (!v && (user as any)?.studentId) {
         setStudentId(String((user as any).studentId));
       }
@@ -58,7 +57,7 @@ export default function StudentProfilePage() {
   const fields = useMemo(() => {
     return [
       { label: 'Email', value: user?.email || '-' },
-      // Hiển thị mã hệ thống (ẩn trong chi tiết để tra cứu khi cần)
+    
       { label: 'Mã hệ thống', value: user?.id || '-', hidden: true },
     ];
   }, [user, name]);
@@ -77,7 +76,6 @@ export default function StudentProfilePage() {
               >
                 {(name?.[0] ?? user?.name?.[0] ?? user?.email?.[0] ?? 'U').toUpperCase()}
               </Avatar>
-              {/* Hidden picker placed near avatar to ensure browser allows programmatic click */}
               <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
               {editing && (
                 <div style={{ marginTop: 6 }}>

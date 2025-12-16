@@ -17,10 +17,12 @@ const WEIGHT_OPTIONS: WeightOption[] = [
 export default function SummaryPage() {
   const [weightKey, setWeightKey] = useState<string>(WEIGHT_OPTIONS[2].label);
 
-  const weights = useMemo(() => WEIGHT_OPTIONS.find((w) => w.label === weightKey)?.weights ?? WEIGHT_OPTIONS[0].weights, [weightKey]);
+  const weights = useMemo(
+    () => WEIGHT_OPTIONS.find((w) => w.label === weightKey)?.weights ?? WEIGHT_OPTIONS[0].weights,
+    [weightKey],
+  );
   const [scores, setScores] = useState<number[]>(() => new Array(weights.length).fill(undefined as unknown as number));
 
-  // reset scores if structure changes
   const onChangeWeights = (label: string) => {
     setWeightKey(label);
     const next = WEIGHT_OPTIONS.find((w) => w.label === label)?.weights ?? [];
